@@ -10,7 +10,7 @@ Windows because it uses the Windows console API.
 
 ## Requirements
 
-- CMake 3.20 or newer
+- CMake 3.22 or newer
 - A C++17 compiler, such as Visual Studio 2022 or MinGW-w64
 - Ninja when using the included CMake presets
 
@@ -52,9 +52,24 @@ cmake --build build --config Release
 .
 |-- include/     Public class declarations
 |-- src/         Class implementations
+|-- tests/       Automated characterization tests
 |-- main.cpp     Application entry point
 `-- CMakeLists.txt
 ```
 
-The documentation, automated tests, architecture overview, and usage examples
-will be expanded as the portfolio refactoring progresses.
+## Tests
+
+Build the selected preset and run its test suite with CTest:
+
+```powershell
+cmake --preset windows-debug
+cmake --build --preset windows-debug
+ctest --test-dir build/windows-debug --output-on-failure
+```
+
+The current characterization suite protects directory loading, statistics,
+search, largest-file selection, tree output, invalid-path handling, and XML
+export/import behavior while the implementation is refactored.
+
+The architecture overview and usage examples will be expanded as the
+portfolio refactoring progresses.
