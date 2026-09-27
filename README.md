@@ -36,7 +36,8 @@ cmake --build --preset windows-debug
 ```
 
 Replace `windows-debug` with `windows-release` for an optimized build. Preset
-executables are generated under `build/<preset>/bin`.
+executables are generated under `build/<preset>/bin`. Both presets treat
+compiler warnings as errors so regressions are detected during development.
 
 To enable warnings as errors:
 

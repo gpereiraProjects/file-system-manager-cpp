@@ -11,7 +11,7 @@ private:
 public:
   static string extrairNome(const string &path);
   static void UTF8();
-  static string Tabulacao(int n);
+  static string Tabulacao(size_t n);
   static string NormalizarCaminho(const string &path);
   static void PrintListaString(list<string> &lista);
   static bool contemPalavra(const string &texto, const string &palavra);

@@ -13,7 +13,7 @@ public:
   list<Item *> &getConteudo();
   const list<Item *> getConteudoConst() const;
   void adicionar(Item *i);
-  int getNItens();
+  size_t getNItens() const;
 
 protected:
 private:

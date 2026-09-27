@@ -26,4 +26,4 @@ void Diretoria::adicionar(Item *i) {
   tamanho += i->getTamanho();
 }
 
-int Diretoria::getNItens() { return conteudo.size(); }
+size_t Diretoria::getNItens() const { return conteudo.size(); }

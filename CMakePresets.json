@@ -13,7 +13,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/windows-debug",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "FILE_SYSTEM_MANAGER_WARNINGS_AS_ERRORS": true
       }
     },
     {
@@ -23,7 +24,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/windows-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "FILE_SYSTEM_MANAGER_WARNINGS_AS_ERRORS": true
       }
     }
   ],

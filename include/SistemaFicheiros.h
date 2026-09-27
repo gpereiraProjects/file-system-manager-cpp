@@ -46,10 +46,10 @@ private:
                            string &strMax); // utilizada no FicheiroMaior
   int memoriaRec(Diretoria *dir);           // utilizada no Memoria
   string *maiorDiretoriaRec(Diretoria *dir,
-                            int *maior); // utilizada no DirectoriaMaisElementos
+                            size_t *maior); // utilizada no DirectoriaMaisElementos
   string *
   menorDiretoriaRec(Diretoria *dir,
-                    int *menor); // utilizada no DirectoriaMenosElementos
+                    size_t *menor); // utilizada no DirectoriaMenosElementos
   string *
   diretoriaMaisEspaco(Diretoria *dir, uintmax_t tamMax,
                       string &strMax); // utilizada no DirectoriaMaisEspaco
@@ -63,7 +63,7 @@ private:
                       // PesquisarAllDirectorias
   bool RemovePorNome(Diretoria *dir, const string &s, const string &tipo,
                      bool fs,
-                     bool importacao_diretoria); // utilizada no RemoverAll
+                     bool operarNoDisco); // utilizada no RemoverAll
   bool removerPorCaminho(Diretoria *dir,
                          const string &caminho); // utilizada no RemoverAll
   void escreverXMLRec(Diretoria *dir, XML *XML); // utilizada no Escrever_XML
@@ -77,10 +77,10 @@ private:
                      string &caminhoDir); // utilizada no MoverDirectoria
   string *DataFicheiroRec(Diretoria *dir,
                           const string &ficheiro); // utilizada no DataFicheiro
-  void ShowRec(Diretoria *dir, int &nTabs, ostream &out); // utilizada no Tree
+  void ShowRec(Diretoria *dir, size_t &nTabs, ostream &out); // utilizada no Tree
   int renomearFicheirosRec(
       Diretoria *dir, const string &fich_old, const string &fich_new,
-      bool importacao_diretoria); // utilizada no RenomearFicheiros
+      bool operarNoDisco); // utilizada no RenomearFicheiros
   bool VerificarDuplicadosRec(
       Diretoria *dir,
       unordered_set<string> &nomes); // utilizada no FicheiroDuplicados
@@ -89,7 +89,7 @@ private:
       unordered_map<string, int> &contador); // utilizada no CopyBatch
   void copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
                      const string &padrao, bool disco,
-                     bool importacao_diretoria); // utilizada no CopyBatch
+                     bool operarNoDisco); // utilizada no CopyBatch
 };
 
 #endif // SISTEMAFICHEIROS_H

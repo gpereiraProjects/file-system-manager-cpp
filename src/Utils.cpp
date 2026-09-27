@@ -53,9 +53,9 @@ void Utils::UTF8() {
  * Retorno:
  * - string: Uma string composta por 'n' caracteres de tabulação concatenados.
  */
-string Utils::Tabulacao(int n) {
+string Utils::Tabulacao(size_t n) {
   string tab = "";
-  for (int i = 0; i < n; i++)
+  for (size_t i = 0; i < n; i++)
     tab += "\t";
   return tab;
 }

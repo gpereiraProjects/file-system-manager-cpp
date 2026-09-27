@@ -200,20 +200,20 @@ int SistemaFicheiros::memoriaRec(Diretoria *dir) {
  * - string*: Ponteiro para uma string contendo o nome da diretoria com mais
  * itens.
  */
-string *SistemaFicheiros::maiorDiretoriaRec(Diretoria *dir, int *maior) {
-  int localMax = dir->getNItens();
+string *SistemaFicheiros::maiorDiretoriaRec(Diretoria *dir, size_t *maior) {
+  size_t localMax = dir->getNItens();
   string localName = dir->getNome();
 
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
       Diretoria *subdir = dynamic_cast<Diretoria *>(item);
-      int nItem = dir->getNItens();
+      size_t nItem = dir->getNItens();
       if (nItem > localMax) {
         localMax = nItem;
         localName = subdir->getNome();
       }
 
-      int subMax = 0;
+      size_t subMax = 0;
       string *nomeSub = maiorDiretoriaRec(subdir, &subMax);
 
       if (nomeSub) {
@@ -246,20 +246,20 @@ string *SistemaFicheiros::maiorDiretoriaRec(Diretoria *dir, int *maior) {
  * - string*: Ponteiro para uma string contendo o nome da diretoria com menos
  * itens.
  */
-string *SistemaFicheiros::menorDiretoriaRec(Diretoria *dir, int *menor) {
-  int localMin = dir->getNItens();
+string *SistemaFicheiros::menorDiretoriaRec(Diretoria *dir, size_t *menor) {
+  size_t localMin = dir->getNItens();
   string localName = dir->getNome();
 
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
       Diretoria *subdir = dynamic_cast<Diretoria *>(item);
-      int nItem = subdir->getNItens();
+      size_t nItem = subdir->getNItens();
       if (nItem < localMin) {
         localMin = nItem;
         localName = subdir->getNome();
       }
 
-      int subMin = INT_MAX;
+      size_t subMin = numeric_limits<size_t>::max();
       string *nomeSub = menorDiretoriaRec(subdir, &subMin);
 
       if (nomeSub) {
@@ -433,7 +433,7 @@ void SistemaFicheiros::pesquisarItensComNomeIgualRec(Diretoria *dir,
  */
 bool SistemaFicheiros::RemovePorNome(Diretoria *dir, const string &s,
                                      const string &tipo, bool fs,
-                                     bool importacao_diretoria) {
+                                     bool operarNoDisco) {
   bool t = (tipo == "DIR") ? false : true;
 
   list<string> lres;
@@ -450,7 +450,7 @@ bool SistemaFicheiros::RemovePorNome(Diretoria *dir, const string &s,
       return false;
     }
 
-    if (fs && importacao_diretoria) {
+    if (fs && operarNoDisco) {
       try {
         fs::remove(Utils::NormalizarCaminho(*itLista));
       } catch (...) {
@@ -684,7 +684,7 @@ string *SistemaFicheiros::DataFicheiroRec(Diretoria *dir,
  * Retorno:
  * - void (Não retorna valor).
  */
-void SistemaFicheiros::ShowRec(Diretoria *dir, int &nTabs, ostream &out) {
+void SistemaFicheiros::ShowRec(Diretoria *dir, size_t &nTabs, ostream &out) {
   out << Utils::Tabulacao(nTabs) << "<D> " << dir->getNome() << " <"
       << dir->getTamanho() << " bytes>" << endl;
 
@@ -726,7 +726,7 @@ void SistemaFicheiros::ShowRec(Diretoria *dir, int &nTabs, ostream &out) {
 int SistemaFicheiros::renomearFicheirosRec(Diretoria *dir,
                                            const string &fich_old,
                                            const string &fich_new,
-                                           bool importacao_diretoria) {
+                                           bool operarNoDisco) {
   int renomeados = 0;
 
   for (auto item : dir->getConteudo()) {
@@ -739,7 +739,7 @@ int SistemaFicheiros::renomearFicheirosRec(Diretoria *dir,
 
         try {
           // --- Se importacao_diretoria == 1 > mexe no filesystem ---
-          if (importacao_diretoria == 1) {
+          if (operarNoDisco) {
             if (fs::exists(newPath)) {
               ostringstream ss;
               ss << "Aviso: destino já existe, saltando: " << newPath.string();
@@ -777,7 +777,7 @@ int SistemaFicheiros::renomearFicheirosRec(Diretoria *dir,
       Diretoria *sub = dynamic_cast<Diretoria *>(item);
       if (sub)
         renomeados +=
-            renomearFicheirosRec(sub, fich_old, fich_new, importacao_diretoria);
+            renomearFicheirosRec(sub, fich_old, fich_new, operarNoDisco);
     }
   }
 
@@ -879,7 +879,7 @@ void SistemaFicheiros::AlterarNomeDuplicado(
  */
 void SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
                                      const string &padrao, bool disco,
-                                     bool importacao_diretoria) {
+                                     bool operarNoDisco) {
   for (auto item : dirOrigem->getConteudo()) {
     if (item->getIsFicheiro()) {
       Ficheiro *f = dynamic_cast<Ficheiro *>(item);
@@ -893,7 +893,7 @@ void SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
       destino->adicionar(copia);
 
       // 2. Copiar para disco na diretoria destino existente
-      if (disco && importacao_diretoria) {
+      if (disco && operarNoDisco) {
         try {
           fs::copy_file(f->getCaminho(),
                         destino->getCaminho() + "/" +
@@ -916,7 +916,7 @@ void SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
     } else {
       // Recursão: percorrer subdiretórios
       Diretoria *d = dynamic_cast<Diretoria *>(item);
-      copiarItemRec(d, destino, padrao, disco, importacao_diretoria);
+      copiarItemRec(d, destino, padrao, disco, operarNoDisco);
     }
   }
 }
@@ -1043,7 +1043,7 @@ int SistemaFicheiros::Memoria() {
  * nullptr se o sistema não tiver sido carregado (raiz nula).
  */
 string *SistemaFicheiros::DirectoriaMaisElementos() {
-  int maior;
+  size_t maior = 0;
   return maiorDiretoriaRec(raiz, &maior);
 }
 
@@ -1061,7 +1061,7 @@ string *SistemaFicheiros::DirectoriaMaisElementos() {
  * nullptr se o sistema não tiver sido carregado (raiz nula).
  */
 string *SistemaFicheiros::DirectoriaMenosElementos() {
-  int menor;
+  size_t menor = 0;
   return menorDiretoriaRec(raiz, &menor);
 }
 
@@ -1506,7 +1506,7 @@ string *SistemaFicheiros::DataFicheiro(const string &ficheiro) {
  * - void (Não retorna valor).
  */
 void SistemaFicheiros::Tree(const string *fich) {
-  int nivel = 0;
+  size_t nivel = 0;
 
   ShowRec(raiz, nivel, cout);
 
