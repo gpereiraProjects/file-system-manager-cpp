@@ -1,0 +1,35 @@
+# Previous repository metadata retained as a local, recoverable backup
+.git-legacy-backup/
+
+# Build outputs
+bin/
+obj/
+build/
+cmake-build-*/
+out/
+*.exe
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.pdb
+
+# Code::Blocks and editor-specific files
+*.depend
+*.layout
+*.cbp.bak
+*.user
+.vscode/
+.idea/
+
+# Runtime-generated files
+*.log
+tree.txt
+
+# Temporary review files
+.tmp/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
