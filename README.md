@@ -12,6 +12,10 @@ Windows because it uses the Windows console API.
 
 - CMake 3.20 or newer
 - A C++17 compiler, such as Visual Studio 2022 or MinGW-w64
+- Ninja when using the included CMake presets
+
+The project is currently developed with the MSYS2 UCRT64 toolchain. Opening an
+MSYS2 UCRT64 terminal makes CMake, Ninja, and GCC available automatically.
 
 ## Build
 
@@ -23,6 +27,16 @@ cmake --build build --config Release
 ```
 
 The executable is generated under `build/bin`.
+
+Alternatively, use one of the included presets:
+
+```powershell
+cmake --preset windows-debug
+cmake --build --preset windows-debug
+```
+
+Replace `windows-debug` with `windows-release` for an optimized build. Preset
+executables are generated under `build/<preset>/bin`.
 
 To enable warnings as errors:
 
