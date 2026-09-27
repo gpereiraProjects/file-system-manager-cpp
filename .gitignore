@@ -1,6 +1,3 @@
-# Previous repository metadata retained as a local, recoverable backup
-.git-legacy-backup/
-
 # Build outputs
 bin/
 obj/
