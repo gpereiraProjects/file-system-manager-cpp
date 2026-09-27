@@ -35,9 +35,9 @@ void Menu::MenuEstatisticas(SistemaFicheiros &SF) {
       Utils::limparEcra();
       cout << "\n--- FICHEIROS ---\n";
       cout << "Total de ficheiros: " << SF.ContarFicheiros() << endl;
-      if (string *r = SF.FicheiroMaior()) {
+      if (unique_ptr<string> r =
+              unique_ptr<string>(SF.FicheiroMaior())) {
         cout << "Ficheiro maior: " << *r << endl;
-        delete r;
       } else
         cout << "Nenhum ficheiro encontrado.\n";
       Utils::esperarEnter();
@@ -48,21 +48,17 @@ void Menu::MenuEstatisticas(SistemaFicheiros &SF) {
       Utils::limparEcra();
       cout << "\n--- DIRECTORIAS ---\n";
       cout << "Total de directorias: " << SF.ContarDirectorias() << endl;
-      string *r;
-      r = SF.DirectoriaMaisElementos();
+      unique_ptr<string> r(SF.DirectoriaMaisElementos());
       if (r) {
         cout << "Mais elementos: " << *r << endl;
-        delete r;
       }
-      r = SF.DirectoriaMenosElementos();
+      r.reset(SF.DirectoriaMenosElementos());
       if (r) {
         cout << "Menos elementos: " << *r << endl;
-        delete r;
       }
-      r = SF.DirectoriaMaisEspaco();
+      r.reset(SF.DirectoriaMaisEspaco());
       if (r) {
         cout << "Mais espaço: " << *r << endl;
-        delete r;
       }
       Utils::esperarEnter();
       break;
@@ -113,10 +109,9 @@ void Menu::MenuPesquisas(SistemaFicheiros &SF) {
       if (cin >> tipoOp) {
         cin.ignore(numeric_limits<streamsize>::max(),
                    '\n'); // Limpar após ler int
-        string *r = SF.Search(nome, tipoOp);
-        if (r != nullptr) {
+        unique_ptr<string> r(SF.Search(nome, tipoOp));
+        if (r) {
           cout << "Encontrado: " << *r << endl;
-          delete r;
         } else {
           cout << "Não encontrado.\n";
         }
@@ -328,9 +323,9 @@ void Menu::MenuAvancado(SistemaFicheiros &SF) {
     case 3: // Mostrar data de ficheiro
       cout << "Nome do ficheiro: ";
       getline(cin, nome);
-      if (string *d = SF.DataFicheiro(nome)) {
+      if (unique_ptr<string> d =
+              unique_ptr<string>(SF.DataFicheiro(nome))) {
         cout << "Data: " << *d << endl;
-        delete d;
       } else
         cout << "Ficheiro não encontrado.\n";
       Utils::esperarEnter();

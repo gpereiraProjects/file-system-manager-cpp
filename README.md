@@ -69,7 +69,23 @@ ctest --test-dir build/windows-debug --output-on-failure
 
 The current characterization suite protects directory loading, statistics,
 search, largest-file selection, tree output, invalid-path handling, and XML
-export/import behavior while the implementation is refactored.
+export/import behavior while the implementation is refactored. It also covers
+file and directory ownership transfers after move operations.
+
+## Memory ownership
+
+The in-memory tree uses `std::unique_ptr` to express exclusive ownership:
+
+- `SistemaFicheiros` owns the root directory;
+- each `Diretoria` owns its files and child directories;
+- move operations transfer ownership instead of copying or reusing owning raw
+  pointers;
+- XML streams and temporary trees rely on automatic lifetime management.
+
+The original assignment's public `std::string*` return types remain available
+for compatibility. Internally, recursive searches use values and
+`std::optional`, and callers immediately wrap compatibility results in
+`std::unique_ptr`.
 
 The architecture overview and usage examples will be expanded as the
 portfolio refactoring progresses.

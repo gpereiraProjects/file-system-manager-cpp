@@ -85,26 +85,24 @@ void testSearchAndLargestFile() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
 
-  std::string *filePath = fileSystem.Search("largest.bin", 0);
+  std::unique_ptr<std::string> filePath(fileSystem.Search("largest.bin", 0));
   expect(filePath != nullptr, "The nested file should be found");
   expect(fs::path(*filePath).filename() == "largest.bin",
          "File search should return the complete matching path");
-  delete filePath;
 
-  std::string *directoryPath = fileSystem.Search("documents", 1);
+  std::unique_ptr<std::string> directoryPath(
+      fileSystem.Search("documents", 1));
   expect(directoryPath != nullptr, "The nested directory should be found");
   expect(fs::path(*directoryPath).filename() == "documents",
          "Directory search should return the complete matching path");
-  delete directoryPath;
 
   expect(fileSystem.Search("missing.txt", 0) == nullptr,
          "A missing file should not produce a result");
 
-  std::string *largest = fileSystem.FicheiroMaior();
+  std::unique_ptr<std::string> largest(fileSystem.FicheiroMaior());
   expect(largest != nullptr, "A largest file should be returned");
   expect(fs::path(*largest).filename() == "largest.bin",
          "The largest fixture file should be selected");
-  delete largest;
 }
 
 void testTreeOutput() {
@@ -143,6 +141,36 @@ void testXmlRoundTrip() {
          "XML round-trip should preserve the directory count");
 }
 
+void testOwnershipTransfersRemainValid() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  expect(fileSystem.MoveFicheiro("small.txt", "documents"),
+         "Moving a file should transfer it to the destination directory");
+  expect(fileSystem.ContarFicheiros() == 2,
+         "Moving a file should preserve the file count");
+
+  std::unique_ptr<std::string> movedFile(fileSystem.Search("small.txt", 0));
+  expect(movedFile != nullptr, "The moved file should remain searchable");
+  expect(fs::path(*movedFile).parent_path().filename() == "documents",
+         "The moved file path should reference its new parent");
+
+  expect(fileSystem.MoverDirectoria("documents", "empty"),
+         "Moving a directory should transfer its complete subtree");
+  expect(fileSystem.ContarDirectorias() == 3,
+         "Moving a directory should preserve the directory count");
+  expect(fileSystem.ContarFicheiros() == 2,
+         "Moving a directory should preserve all contained files");
+
+  std::unique_ptr<std::string> movedDirectory(
+      fileSystem.Search("documents", 1));
+  expect(movedDirectory != nullptr,
+         "The moved directory should remain searchable");
+  expect(fs::path(*movedDirectory).parent_path().filename() == "empty",
+         "The moved directory path should reference its new parent");
+}
+
 } // namespace
 
 int main() {
@@ -156,6 +184,7 @@ int main() {
       {"search and largest file", testSearchAndLargestFile},
       {"tree output", testTreeOutput},
       {"XML round-trip", testXmlRoundTrip},
+      {"ownership transfers", testOwnershipTransfersRemainValid},
   };
 
   std::size_t failures = 0;

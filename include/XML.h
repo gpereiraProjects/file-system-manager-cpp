@@ -28,7 +28,7 @@ public:
   void WriteEndDirectory();
 
   //=============READ=============
-  ifstream *ImportDocument(const string &ficheiro);
+  ifstream ImportDocument(const string &ficheiro);
   void ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual);
 };
 

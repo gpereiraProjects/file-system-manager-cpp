@@ -109,28 +109,22 @@ void XML::WriteEndDirectory() {
 //===========================================IMPORT===========================================
 /**
  * Resumo:
- * Tenta abrir um ficheiro XML existente para leitura/importação.
- * A função aloca dinamicamente memória para um objeto 'ifstream'. Se a abertura
- * falhar (ficheiro inexistente ou sem permissões), regista o erro no Logger,
- * liberta a memória alocada para evitar fugas e retorna nulo.
+ * Tenta abrir um ficheiro XML existente para leitura/importação. O fluxo é
+ * devolvido por valor e gere automaticamente os seus próprios recursos. Se a
+ * abertura falhar, regista o erro no Logger e devolve um fluxo fechado.
  *
  * Parâmetros:
  * - ficheiro (const string&): O caminho ou nome do ficheiro XML a ser lido.
  *
  * Retorno:
- * - ifstream*: Um ponteiro para o fluxo de ficheiro aberto e pronto a ler.
- * Retorna nullptr em caso de erro.
- * (Nota: O código que chamar esta função fica responsável por fazer 'delete' do
- * ponteiro).
+ * - ifstream: Fluxo aberto e pronto a ler, ou um fluxo fechado em caso de erro.
  */
-ifstream *XML::ImportDocument(const string &ficheiro) {
-  ifstream *f = new ifstream(ficheiro);
-  if (!f->is_open()) {
+ifstream XML::ImportDocument(const string &ficheiro) {
+  ifstream input(ficheiro);
+  if (!input.is_open()) {
     Logger::log(Logger::Level::ERROR_, "Erro ao abrir o XML: " + ficheiro);
-    delete f;
-    return nullptr;
   }
-  return f;
+  return input;
 }
 
 /**
@@ -180,15 +174,15 @@ void XML::ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual) {
       string nome = match[1];
       // int tamanho = stoi(match[2]);
 
-      Diretoria *nova =
-          new Diretoria(nome, dirAtual->getCaminho() + "/" + nome);
+      auto nova =
+          make_unique<Diretoria>(nome, dirAtual->getCaminho() + "/" + nome);
 
       // MERGULHA (Recursão)
-      ReadDirectory(ficheiro, nova);
+      ReadDirectory(ficheiro, nova.get());
 
       // Depois de voltar da recursão (quando encontrou </diretoria>), adiciona
       // à atual
-      dirAtual->adicionar(nova);
+      dirAtual->adicionar(move(nova));
     }
     // 2. Ficheiro -> Adiciona e continua no loop
     else if (regex_search(linha, match, regexFicheiro)) {
@@ -198,9 +192,10 @@ void XML::ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual) {
       string dataModificacao = match[4];
 
       // Se o construtor aceitar mais dados, passa-os aqui
-      Ficheiro *novo = new Ficheiro(nome, dirAtual->getCaminho() + "/" + nome,
-                                    tamanho, extensao, dataModificacao);
-      dirAtual->adicionar(novo);
+      auto novo = make_unique<Ficheiro>(
+          nome, dirAtual->getCaminho() + "/" + nome, tamanho, extensao,
+          dataModificacao);
+      dirAtual->adicionar(move(novo));
     }
     // 3. Fecho de Diretoria -> Sai da recursão atual
     else if (regex_search(linha, regexDiretoriaFecho)) {

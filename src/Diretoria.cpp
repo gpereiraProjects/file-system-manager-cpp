@@ -1,6 +1,5 @@
 #include "Diretoria.h"
 #include "Ficheiro.h"
-#include "Logger.h"
 
 //==================== Construtor e Destrutor ====================
 Diretoria::Diretoria(const string &_nome, const string &_caminho)
@@ -8,22 +7,16 @@ Diretoria::Diretoria(const string &_nome, const string &_caminho)
   tamanho = 0;
 }
 
-Diretoria::~Diretoria() {
-  for (Item *item : conteudo) {
-    delete item; // apaga item (ficheiro ou diretoria)
-  }
-  conteudo.clear();
-  Logger::log(Logger::Level::INFO, "Diretoria apagada: " + getNome());
+//==================== Métodos Públicos ====================
+Diretoria::Conteudo &Diretoria::getConteudo() { return conteudo; }
+
+const Diretoria::Conteudo &Diretoria::getConteudoConst() const {
+  return conteudo;
 }
 
-//==================== Métodos Públicos ====================
-list<Item *> &Diretoria::getConteudo() { return conteudo; }
-
-const list<Item *> Diretoria::getConteudoConst() const { return conteudo; }
-
-void Diretoria::adicionar(Item *i) {
-  conteudo.push_back(i);
-  tamanho += i->getTamanho();
+void Diretoria::adicionar(unique_ptr<Item> item) {
+  tamanho += item->getTamanho();
+  conteudo.push_back(move(item));
 }
 
 size_t Diretoria::getNItens() const { return conteudo.size(); }

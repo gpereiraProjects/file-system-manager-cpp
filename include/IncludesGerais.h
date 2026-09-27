@@ -19,6 +19,8 @@
 #include <stdexcept>
 // Biblioteca para garantir exclusão mútua em threads
 #include <mutex>
+#include <memory>
+#include <optional>
 
 using namespace std;
 namespace fs = std::filesystem;

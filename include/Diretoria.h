@@ -7,17 +7,24 @@
 
 class Diretoria : public Item {
 public:
-  Diretoria(const string &_nome, const string &_caminho);
-  virtual ~Diretoria();
+  using Conteudo = list<unique_ptr<Item>>;
 
-  list<Item *> &getConteudo();
-  const list<Item *> getConteudoConst() const;
-  void adicionar(Item *i);
+  Diretoria(const string &_nome, const string &_caminho);
+  ~Diretoria() override = default;
+
+  Diretoria(const Diretoria &) = delete;
+  Diretoria &operator=(const Diretoria &) = delete;
+  Diretoria(Diretoria &&) noexcept = default;
+  Diretoria &operator=(Diretoria &&) noexcept = default;
+
+  Conteudo &getConteudo();
+  const Conteudo &getConteudoConst() const;
+  void adicionar(unique_ptr<Item> item);
   size_t getNItens() const;
 
 protected:
 private:
-  list<Item *> conteudo;
+  Conteudo conteudo;
 };
 
 #endif // DIRETORIA_H
