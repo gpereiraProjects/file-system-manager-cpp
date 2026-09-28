@@ -9,7 +9,6 @@
 #include <cctype>
 #include <iterator>
 #include <unordered_map>
-#include <unordered_set>
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -130,11 +129,8 @@ uintmax_t parseSize(const string &value) {
 }
 
 void validateItemName(const string &name) {
-  if (name.empty() || name == "." || name == ".." ||
-      name.find('/') != string::npos || name.find('\\') != string::npos ||
-      name.find('\0') != string::npos) {
+  if (!Utils::nomeItemPortatilValido(name))
     throw runtime_error("Nome de item XML inválido.");
-  }
 }
 
 class XmlReader {
@@ -307,8 +303,6 @@ private:
 
     const string path = (fs::path(parentPath) / name).generic_string();
     auto directory = make_unique<Diretoria>(name, path);
-    unordered_set<string> childNames;
-
     while (true) {
       skipWhitespace();
       if (startsWith("</"))
@@ -316,7 +310,13 @@ private:
       if (position >= source.size())
         fail("Diretoria sem tag de fecho: " + name);
       auto child = readItem(path);
-      if (!childNames.insert(child->getNome()).second)
+      const bool duplicate = any_of(
+          directory->getConteudo().begin(), directory->getConteudo().end(),
+          [&child](const unique_ptr<Item> &existing) {
+            return Utils::nomesItemEquivalentes(existing->getNome(),
+                                                child->getNome());
+          });
+      if (duplicate)
         fail("Nome duplicado na diretoria " + name + ": " +
              child->getNome());
       directory->adicionar(move(child));

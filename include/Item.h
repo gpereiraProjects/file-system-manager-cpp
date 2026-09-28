@@ -17,7 +17,7 @@ public:
 
   //============SET============
   void setCaminho(const std::string &novoCaminho);
-  void setNome(const std::string &novoNome);
+  virtual void setNome(const std::string &novoNome);
 
 protected:
   std::string nome;

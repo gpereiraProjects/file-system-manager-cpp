@@ -112,6 +112,9 @@ temporary test fixtures. The implementation maintains these invariants:
 - failed physical moves attempt to roll back before returning an error;
 - removals update the disk before committing the in-memory change;
 - batch copies add an in-memory item only after its physical copy succeeds;
+- batch renames validate portable leaf names and every destination before any
+  change, then roll back completed disk renames if a later one fails;
+- renaming a file also keeps its extension metadata synchronized;
 - directory sizes and total file bytes are recalculated after mutations.
 
 ## XML persistence
@@ -125,8 +128,10 @@ entire document. It supports escaped and numeric character references, flexible
 attribute order and self-closing file elements. It rejects malformed nesting,
 unknown or duplicate attributes, invalid and overflowing sizes, inconsistent
 directory totals, duplicate child names, multiple roots, unknown entities and
-names that could escape their parent path. Unsupported XML constructs are
-rejected rather than interpreted.
+non-portable names, including reserved Windows device names and names that
+could escape their parent path. Child-name collisions are checked without
+ASCII case sensitivity so a snapshot remains portable across supported
+platforms. Unsupported XML constructs are rejected rather than interpreted.
 
 ## Portability
 

@@ -348,6 +348,13 @@ void testMalformedXmlVariantsPreserveState() {
       "tamanho=\"1\" extensao=\"\" dataModificacao=\"\"/><ficheiro "
       "nome=\"same\" tamanho=\"1\" extensao=\"\" "
       "dataModificacao=\"\"/></diretoria>",
+      "<diretoria nome=\"root\" tamanho=\"1\"><ficheiro nome=\"CON.txt\" "
+      "tamanho=\"1\" extensao=\"txt\" "
+      "dataModificacao=\"\"/></diretoria>",
+      "<diretoria nome=\"root\" tamanho=\"2\"><ficheiro nome=\"same.txt\" "
+      "tamanho=\"1\" extensao=\"txt\" dataModificacao=\"\"/><ficheiro "
+      "nome=\"SAME.TXT\" tamanho=\"1\" extensao=\"txt\" "
+      "dataModificacao=\"\"/></diretoria>",
       "<diretoria nome=\"root\" tamanho=\"0\"></diretoria>"
       "<diretoria nome=\"second\" tamanho=\"0\"></diretoria>",
       "<diretoria nome=\"root\" tamanho=\"0\" extra=\"unsupported\">"
@@ -510,6 +517,132 @@ void testRenameKeepsDiskAndMemoryConsistent() {
          "The old filename should no longer be represented in memory");
 }
 
+void testRenameUpdatesExtensionMetadata() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  fileSystem.RenomearFicheiros("small.txt", "renamed.bin");
+  expect(fs::exists(fixture.root / "renamed.bin"),
+         "Renaming to a different extension should update the disk");
+
+  const fs::path xmlPath = fixture.root / "renamed.xml";
+  expect(fileSystem.Escrever_XML(xmlPath.string()),
+         "The renamed tree should remain exportable");
+  std::ifstream input(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(input)),
+                        std::istreambuf_iterator<char>());
+  expect(xml.find("nome=\"renamed.bin\"") != std::string::npos,
+         "XML should contain the new filename");
+  expect(xml.find("nome=\"renamed.bin\" tamanho=\"3\" extensao=\"bin\"") !=
+             std::string::npos,
+         "The extension metadata should follow the renamed file");
+}
+
+void testRenameRejectsInvalidNamesAndCollisions() {
+  TemporaryFixture fixture;
+  {
+    std::ofstream collision(fixture.root / "renamed.txt", std::ios::binary);
+    collision << "occupied";
+  }
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  const std::vector<std::string> invalidNames = {
+      "",          ".",           "..",        "../escaped.txt",
+      "sub/name",  "sub\\name",  "CON.txt",   "bad?.txt",
+      "trailing.", "trailing ",
+      (fixture.root / "absolute.txt").string()};
+
+  for (const std::string &invalidName : invalidNames) {
+    fileSystem.RenomearFicheiros("small.txt", invalidName);
+    expect(fs::exists(fixture.root / "small.txt"),
+           "An invalid target name must preserve the source file");
+    std::unique_ptr<std::string> preserved(fileSystem.Search("small.txt", 0));
+    expect(preserved != nullptr,
+           "An invalid target name must preserve the in-memory item");
+  }
+
+  fileSystem.RenomearFicheiros("small.txt", "renamed.txt");
+  expect(fs::exists(fixture.root / "small.txt"),
+         "A destination collision must preserve the source file");
+  expect(fs::exists(fixture.root / "renamed.txt"),
+         "A destination collision must preserve the existing file");
+  expect(fileSystem.ContarFicheiros() == 3,
+         "A rejected collision must preserve all in-memory files");
+}
+
+void testBatchRenameIsAllOrNothing() {
+  {
+    TemporaryFixture fixture;
+    {
+      std::ofstream rootMatch(fixture.root / "same.txt", std::ios::binary);
+      rootMatch << "root";
+      std::ofstream nestedMatch(fixture.root / "documents" / "same.txt",
+                                std::ios::binary);
+      nestedMatch << "nested";
+      std::ofstream collision(fixture.root / "documents" / "target.txt",
+                              std::ios::binary);
+      collision << "occupied";
+    }
+
+    SistemaFicheiros fileSystem;
+    expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+    fileSystem.RenomearFicheiros("same.txt", "target.txt");
+    expect(fs::exists(fixture.root / "same.txt") &&
+               fs::exists(fixture.root / "documents" / "same.txt"),
+           "A collision in one directory must cancel the complete batch");
+    expect(!fs::exists(fixture.root / "target.txt"),
+           "A rejected batch must not rename earlier matches");
+  }
+
+  {
+    TemporaryFixture fixture;
+    {
+      std::ofstream rootMatch(fixture.root / "same.txt", std::ios::binary);
+      rootMatch << "root";
+      std::ofstream nestedMatch(fixture.root / "documents" / "same.txt",
+                                std::ios::binary);
+      nestedMatch << "nested";
+    }
+
+    SistemaFicheiros fileSystem;
+    expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+    fileSystem.RenomearFicheiros("same.txt", "renamed.dat");
+    expect(fs::exists(fixture.root / "renamed.dat") &&
+               fs::exists(fixture.root / "documents" / "renamed.dat"),
+           "Every non-conflicting match should be renamed");
+    expect(!fs::exists(fixture.root / "same.txt") &&
+               !fs::exists(fixture.root / "documents" / "same.txt"),
+           "A successful batch should remove every old path");
+  }
+}
+
+void testXmlRenameRejectsPortableCollision() {
+  TemporaryFixture fixture;
+  const fs::path xmlPath = fixture.root / "virtual.xml";
+  {
+    std::ofstream output(xmlPath, std::ios::binary);
+    output << "<diretoria nome=\"root\" tamanho=\"2\">"
+              "<ficheiro nome=\"a.txt\" tamanho=\"1\" extensao=\"txt\" "
+              "dataModificacao=\"\"/>"
+              "<ficheiro nome=\"b.txt\" tamanho=\"1\" extensao=\"txt\" "
+              "dataModificacao=\"\"/>"
+              "</diretoria>";
+  }
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Ler_XML(xmlPath.string()), "Valid virtual tree failed");
+  fileSystem.RenomearFicheiros("a.txt", "B.TXT");
+  std::unique_ptr<std::string> first(fileSystem.Search("a.txt", 0));
+  std::unique_ptr<std::string> second(fileSystem.Search("b.txt", 0));
+  expect(first != nullptr && second != nullptr,
+         "A portable case-insensitive collision must preserve both items");
+  expect(fileSystem.ContarFicheiros() == 2,
+         "A rejected virtual rename must preserve the tree");
+}
+
 void testRecursiveDirectoryRemoval() {
   TemporaryFixture fixture;
   fs::create_directories(fixture.root / "documents" / "nested");
@@ -570,6 +703,11 @@ int main() {
       {"removal statistics", testRemovalUpdatesStatistics},
       {"batch copy collisions", testBatchCopyResolvesNameCollisions},
       {"rename consistency", testRenameKeepsDiskAndMemoryConsistent},
+      {"rename extension metadata", testRenameUpdatesExtensionMetadata},
+      {"rename validation and collisions",
+       testRenameRejectsInvalidNamesAndCollisions},
+      {"transactional batch rename", testBatchRenameIsAllOrNothing},
+      {"virtual rename collision", testXmlRenameRejectsPortableCollision},
       {"recursive directory removal", testRecursiveDirectoryRemoval},
       {"root removal guard", testRootDirectoryCannotBeRemoved},
   };

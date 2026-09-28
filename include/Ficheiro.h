@@ -14,6 +14,7 @@ public:
 
   const std::string &getExtensao() const;
   const std::string &getDataModificacao() const;
+  void setNome(const std::string &novoNome) override;
   bool getIsFicheiro() const override { return true; }
 
 private:

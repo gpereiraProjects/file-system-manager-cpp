@@ -4,6 +4,8 @@
 #include "Utils.h"
 #include "XML.h"
 
+#include <vector>
+
 using namespace std;
 namespace fs = std::filesystem;
 
@@ -730,87 +732,6 @@ void SistemaFicheiros::ShowRec(Diretoria *dir, size_t &nTabs, ostream &out) {
     }
 
   nTabs--;
-}
-
-/**
- * Resumo:
- * Percorre recursivamente a diretoria e as suas subdiretorias para localizar e
- * renomear todas as ocorrências de ficheiros com o nome 'fich_old' para
- * 'fich_new'. A função atualiza sempre a estrutura interna em memória.
- * Adicionalmente, se a flag 'importacao_diretoria' estiver ativa, tenta efetuar
- * a renomeação física no sistema de ficheiros do SO, lidando com conflitos de
- * nomes existentes.
- *
- * Parâmetros:
- * - dir (Diretoria*): Ponteiro para a diretoria onde a pesquisa inicia.
- * - fich_old (const string&): O nome atual do ficheiro que se pretende alterar.
- * - fich_new (const string&): O novo nome a ser atribuído.
- * - importacao_diretoria (bool): Flag de controlo. Se 'true', altera o ficheiro
- * fisicamente no disco. Se 'false', altera apenas os metadados na memória do
- * programa.
- *
- * Retorno:
- * - int: O número total de ficheiros que foram renomeados com sucesso.
- */
-int SistemaFicheiros::renomearFicheirosRec(Diretoria *dir,
-                                           const string &fich_old,
-                                           const string &fich_new,
-                                           bool operarNoDisco) {
-  int renomeados = 0;
-
-  for (const auto &item : dir->getConteudo()) {
-    if (item->getIsFicheiro()) {
-      if (item->getNome() == fich_old) {
-
-        fs::path oldPath(item->getCaminho());
-        fs::path parent = oldPath.parent_path();
-        fs::path newPath = parent / fich_new;
-
-        try {
-          // --- Se importacao_diretoria == 1 > mexe no filesystem ---
-          if (operarNoDisco) {
-            if (fs::exists(newPath)) {
-              ostringstream ss;
-              ss << "Aviso: destino já existe, saltando: " << newPath.string();
-              Logger::log(Logger::Level::INFO, ss.str());
-              continue;
-            }
-
-            fs::rename(oldPath, newPath);
-
-            cout << "Renomeado no filesystem: " << oldPath.string() << " -> "
-                 << newPath.string() << endl;
-          }
-          // --- Se importacao_diretoria == 0 > NÃO mexe no Filesystem ---
-          else {
-            cout << "Alterado internamente (sem mexer no Filesystem): "
-                 << oldPath.string() << " -> " << newPath.string() << endl;
-          }
-
-          // Atualiza sempre os dados internos
-          item->setNome(fich_new);
-          item->setCaminho(newPath.string());
-
-          renomeados++;
-
-        } catch (const exception &e) {
-          ostringstream ss;
-          ss << "Erro ao renomear ficheiro " << item->getCaminho() << ": "
-             << e.what();
-
-          Logger::log(Logger::Level::ERROR_, ss.str());
-        }
-      }
-
-    } else {
-      Diretoria *sub = dynamic_cast<Diretoria *>(item.get());
-      if (sub)
-        renomeados +=
-            renomearFicheirosRec(sub, fich_old, fich_new, operarNoDisco);
-    }
-  }
-
-  return renomeados;
 }
 
 /**
@@ -1656,11 +1577,10 @@ void SistemaFicheiros::PesquisarAllFicheiros(list<string> &lres,
 
 /**
  * Resumo:
- * Método público responsável por iniciar a renomeação em massa de ficheiros.
- * Verifica se o sistema de ficheiros está carregado e, em caso afirmativo,
- * invoca a função recursiva interna 'renomearFicheirosRec' para processar
- * toda a árvore. No final, exibe uma mensagem na consola indicando quantos
- * ficheiros foram efetivamente alterados ou se nenhum foi encontrado.
+ * Renomeia em massa os ficheiros com o nome indicado. Antes de alterar o disco,
+ * valida o novo nome e todos os destinos. Se uma alteração física falhar, tenta
+ * repor as anteriores; o modelo interno só é atualizado depois de todas as
+ * alterações físicas concluírem com sucesso.
  *
  * Parâmetros:
  * - fich_old (const string&): O nome atual do ficheiro a ser substituído.
@@ -1671,19 +1591,135 @@ void SistemaFicheiros::PesquisarAllFicheiros(list<string> &lres,
  */
 void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
                                          const string &fich_new) {
-  if (raiz == nullptr) {
+  if (!raiz) {
     Logger::log(Logger::Level::ERROR_, "Erro: sistema não carregado.");
     return;
   }
 
-  int total =
-      renomearFicheirosRec(raiz.get(), fich_old, fich_new,
-                           importacao_diretoria);
+  if (!Utils::nomeItemPortatilValido(fich_new)) {
+    Logger::log(Logger::Level::ERROR_,
+                "Erro: o novo nome não é um nome de ficheiro portátil válido.");
+    cout << "Nome de ficheiro inválido.\n";
+    return;
+  }
 
-  if (total == 0)
+  if (fich_old == fich_new) {
+    cout << "O nome atual e o novo nome são iguais.\n";
+    return;
+  }
+
+  struct RenameTarget {
+    Diretoria *parent;
+    Ficheiro *file;
+    fs::path oldPath;
+    fs::path newPath;
+  };
+
+  vector<RenameTarget> targets;
+  const auto collectTargets =
+      [&targets, &fich_old,
+       &fich_new](auto &&self, Diretoria *directory) -> void {
+    for (const auto &item : directory->getConteudo()) {
+      if (item->getIsFicheiro()) {
+        if (item->getNome() == fich_old) {
+          auto *file = dynamic_cast<Ficheiro *>(item.get());
+          if (file) {
+            const fs::path oldPath(file->getCaminho());
+            targets.push_back(
+                {directory, file, oldPath, oldPath.parent_path() / fich_new});
+          }
+        }
+      } else if (auto *subdirectory =
+                     dynamic_cast<Diretoria *>(item.get())) {
+        self(self, subdirectory);
+      }
+    }
+  };
+  collectTargets(collectTargets, raiz.get());
+
+  if (targets.empty()) {
     cout << "Nenhum ficheiro encontrado com o nome '" << fich_old << "'.\n";
-  else
-    cout << "Operação concluída. Ficheiros renomeados: " << total << "\n";
+    return;
+  }
+
+  for (const RenameTarget &target : targets) {
+    const bool modelCollision = any_of(
+        target.parent->getConteudo().begin(),
+        target.parent->getConteudo().end(),
+        [&target, &fich_new](const unique_ptr<Item> &item) {
+          return item.get() != target.file &&
+                 Utils::nomesItemEquivalentes(item->getNome(), fich_new);
+        });
+    if (modelCollision) {
+      Logger::log(Logger::Level::ERROR_,
+                  "Erro: o destino já contém um item chamado '" + fich_new +
+                      "'.");
+      cout << "Renomeação cancelada: nome já existente.\n";
+      return;
+    }
+
+    if (importacao_diretoria) {
+      error_code existsError;
+      const bool destinationExists = fs::exists(target.newPath, existsError);
+      if (existsError) {
+        Logger::log(Logger::Level::ERROR_,
+                    "Erro ao validar o destino da renomeação: " +
+                        existsError.message());
+        cout << "Renomeação cancelada: não foi possível validar o destino.\n";
+        return;
+      }
+
+      if (destinationExists) {
+        error_code equivalentError;
+        const bool sameFile =
+            fs::equivalent(target.oldPath, target.newPath, equivalentError);
+        if (equivalentError || !sameFile) {
+          Logger::log(Logger::Level::ERROR_,
+                      "Erro: o caminho de destino já existe: " +
+                          target.newPath.string());
+          cout << "Renomeação cancelada: destino já existente.\n";
+          return;
+        }
+      }
+    }
+  }
+
+  size_t renamedOnDisk = 0;
+  if (importacao_diretoria) {
+    for (const RenameTarget &target : targets) {
+      try {
+        fs::rename(target.oldPath, target.newPath);
+        ++renamedOnDisk;
+      } catch (const fs::filesystem_error &error) {
+        Logger::log(Logger::Level::ERROR_,
+                    "Erro ao renomear ficheiro: " + string(error.what()));
+
+        for (size_t index = renamedOnDisk; index > 0; --index) {
+          const RenameTarget &completed = targets[index - 1];
+          error_code rollbackError;
+          fs::rename(completed.newPath, completed.oldPath, rollbackError);
+          if (rollbackError) {
+            Logger::log(Logger::Level::ERROR_,
+                        "Falha no rollback da renomeação de '" +
+                            completed.newPath.string() + "': " +
+                            rollbackError.message());
+          }
+        }
+
+        cout << "Renomeação cancelada devido a um erro no sistema de "
+                "ficheiros.\n";
+        return;
+      }
+    }
+  }
+
+  for (RenameTarget &target : targets) {
+    target.file->setNome(fich_new);
+    target.file->setCaminho(target.newPath.string());
+  }
+
+  cout << "Operação concluída. Ficheiros renomeados: " << targets.size()
+       << "\n";
 }
 
 /**

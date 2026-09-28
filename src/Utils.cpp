@@ -1,5 +1,7 @@
 #include "Utils.h"
 
+#include <cctype>
+
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -90,6 +92,45 @@ string Utils::Tabulacao(size_t n) {
  */
 string Utils::NormalizarCaminho(const string &path) {
   return fs::path(path).lexically_normal().generic_string();
+}
+
+bool Utils::nomeItemPortatilValido(const string &nome) {
+  if (nome.empty() || nome == "." || nome == ".." || nome.back() == '.' ||
+      nome.back() == ' ')
+    return false;
+
+  static const string caracteresInvalidos = "<>:\"/\\|?*";
+  for (const unsigned char character : nome) {
+    if (character < 32U ||
+        caracteresInvalidos.find(static_cast<char>(character)) != string::npos)
+      return false;
+  }
+
+  string nomeBase = nome.substr(0, nome.find('.'));
+  while (!nomeBase.empty() && nomeBase.back() == ' ')
+    nomeBase.pop_back();
+  transform(nomeBase.begin(), nomeBase.end(), nomeBase.begin(),
+            [](const unsigned char character) {
+              return static_cast<char>(toupper(character));
+            });
+
+  static const unordered_set<string> nomesReservados = {
+      "CON",  "PRN",  "AUX",  "NUL",  "COM1", "COM2", "COM3",
+      "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1",
+      "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8",
+      "LPT9"};
+  return nomesReservados.find(nomeBase) == nomesReservados.end();
+}
+
+bool Utils::nomesItemEquivalentes(const string &left, const string &right) {
+  if (left.size() != right.size())
+    return false;
+
+  return equal(left.begin(), left.end(), right.begin(),
+               [](const unsigned char leftCharacter,
+                  const unsigned char rightCharacter) {
+                 return toupper(leftCharacter) == toupper(rightCharacter);
+               });
 }
 
 /**

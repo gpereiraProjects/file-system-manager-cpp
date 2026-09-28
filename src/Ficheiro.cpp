@@ -81,3 +81,10 @@ Ficheiro::~Ficheiro() {
 const string &Ficheiro::getExtensao() const { return extensao; }
 
 const string &Ficheiro::getDataModificacao() const { return dataModificacao; }
+
+void Ficheiro::setNome(const string &novoNome) {
+  Item::setNome(novoNome);
+  extensao = fs::path(novoNome).extension().string();
+  if (!extensao.empty() && extensao.front() == '.')
+    extensao.erase(0, 1);
+}

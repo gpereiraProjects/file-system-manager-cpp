@@ -92,10 +92,6 @@ private:
       Diretoria *dir, const std::string &ficheiro); // utilizada no DataFicheiro
   void ShowRec(Diretoria *dir, std::size_t &nTabs,
                std::ostream &out); // utilizada no Tree
-  int renomearFicheirosRec(
-      Diretoria *dir, const std::string &fich_old,
-      const std::string &fich_new,
-      bool operarNoDisco); // utilizada no RenomearFicheiros
   bool VerificarDuplicadosRec(
       Diretoria *dir,
       std::unordered_set<std::string>

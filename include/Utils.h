@@ -13,6 +13,9 @@ public:
   static void UTF8();
   static std::string Tabulacao(std::size_t n);
   static std::string NormalizarCaminho(const std::string &path);
+  static bool nomeItemPortatilValido(const std::string &nome);
+  static bool nomesItemEquivalentes(const std::string &left,
+                                    const std::string &right);
   static void PrintListaString(std::list<std::string> &lista);
   static bool contemPalavra(const std::string &texto,
                             const std::string &palavra);
