@@ -148,7 +148,7 @@ ifstream XML::ImportDocument(const string &ficheiro) {
  * Retorno:
  * - void (Não retorna valor).
  */
-void XML::ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual) {
+bool XML::ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual) {
   string linha;
 
   // static const evita recriar a regex em cada recursão
@@ -178,7 +178,8 @@ void XML::ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual) {
           make_unique<Diretoria>(nome, dirAtual->getCaminho() + "/" + nome);
 
       // MERGULHA (Recursão)
-      ReadDirectory(ficheiro, nova.get());
+      if (!ReadDirectory(ficheiro, nova.get()))
+        return false;
 
       // Depois de voltar da recursão (quando encontrou </diretoria>), adiciona
       // à atual
@@ -199,7 +200,8 @@ void XML::ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual) {
     }
     // 3. Fecho de Diretoria -> Sai da recursão atual
     else if (regex_search(linha, regexDiretoriaFecho)) {
-      break; // Sai do ciclo e retorna ao nível anterior
+      return true;
     }
   }
+  return false;
 }

@@ -37,9 +37,10 @@ Ficheiro::Ficheiro(const string &_nome, const string &_caminho)
     ss << put_time(localtime(&tempo), "%Y|%m|%d");
     dataModificacao = ss.str();
 
-  } catch (...) {
+  } catch (const exception &e) {
     Logger::log(Logger::Level::ERROR_,
-                "Erro ao obter informações do ficheiro: " + caminho);
+                "Erro ao obter informações do ficheiro '" + caminho +
+                    "': " + e.what());
     extensao = ""; // se falhar por algum motivo
     tamanho = 0;
     dataModificacao = "Desconhecida";

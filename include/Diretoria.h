@@ -20,6 +20,8 @@ public:
   Conteudo &getConteudo();
   const Conteudo &getConteudoConst() const;
   void adicionar(unique_ptr<Item> item);
+  unique_ptr<Item> extrair(Item *item);
+  uintmax_t recalcularTamanho();
   size_t getNItens() const;
 
 protected:

@@ -18,7 +18,7 @@
 string Utils::extrairNome(const string &path) {
   try {
     return fs::path(path).filename().string();
-  } catch (...) {
+  } catch (const exception &) {
     return path; // devolve o original se algo correr mal
   }
 }
@@ -164,9 +164,10 @@ string Utils::gerarSufixo(int n) {
  * - string: O novo nome completo com o sufixo inserido na posição correta.
  */
 string Utils::alterarNomeDuplicado(string nome, int n, string extensao) {
-  size_t pos = nome.rfind('.');
-  string antesDoUltimoPonto = nome.substr(0, pos);
-  return antesDoUltimoPonto + gerarSufixo(n) + "." + extensao;
+  fs::path caminho(nome);
+  string base = caminho.stem().string();
+  string sufixoExtensao = extensao.empty() ? "" : "." + extensao;
+  return base + gerarSufixo(n) + sufixoExtensao;
 }
 
 void Utils::limparEcra() {

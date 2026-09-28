@@ -49,7 +49,7 @@ private:
   int ContarDirectoriasRec(Diretoria *dir);    // utilizada no ContarDirectorias
   void ficheiroMaiorRec(Diretoria *dir, uintmax_t &tamMax,
                         string &strMax); // utilizada no FicheiroMaior
-  int memoriaRec(Diretoria *dir);           // utilizada no Memoria
+  uintmax_t memoriaRec(Diretoria *dir);     // utilizada no Memoria
   string maiorDiretoriaRec(Diretoria *dir,
                            size_t &maior); // utilizada no DirectoriaMaisElementos
   string menorDiretoriaRec(
@@ -73,6 +73,8 @@ private:
   Item *procurarItemRec(
       Diretoria *dir, const string &nomeProcurado,
       bool procurarDiretorias); // utilizada no MoveFicheiro e MoverDirectoria
+  Diretoria *procurarDiretoriaPai(Diretoria *dir, const Item *item);
+  bool contemDiretoria(Diretoria *origem, const Diretoria *procurada);
   unique_ptr<Item> extrairItemPorNome(
       Diretoria *dir,
       const string &nome); // utilizada no MoveFicheiro e MoverDirectoria
@@ -90,7 +92,7 @@ private:
   void AlterarNomeDuplicado(
       Diretoria *dir,
       unordered_map<string, int> &contador); // utilizada no CopyBatch
-  void copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
+  bool copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
                      const string &padrao, bool disco,
                      bool operarNoDisco); // utilizada no CopyBatch
 };

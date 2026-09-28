@@ -29,7 +29,7 @@ public:
 
   //=============READ=============
   ifstream ImportDocument(const string &ficheiro);
-  void ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual);
+  bool ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual);
 };
 
 #endif // XML_H

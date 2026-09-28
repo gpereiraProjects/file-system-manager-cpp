@@ -14,8 +14,8 @@ SistemaFicheiros::SistemaFicheiros()
  * Percorre recursivamente o sistema de ficheiros a partir do caminho da
  * diretoria fornecida. Para cada entrada encontrada (ficheiro ou pasta), cria o
  * respetivo objeto ('Ficheiro' ou 'Diretoria') e adiciona-o à estrutura em
- * memória. Em caso de falha (ex: permissões negadas), captura a exceção e
- * regista o erro no Logger.
+ * memória. As exceções são propagadas para `Load`, que só substitui a árvore
+ * ativa depois de concluir todo o carregamento.
  *
  * Parâmetros:
  * - diretoria (Diretoria*): Ponteiro para o objeto diretoria que será
@@ -25,27 +25,18 @@ SistemaFicheiros::SistemaFicheiros()
  * - void (Não retorna valor).
  */
 void SistemaFicheiros::carregarConteudo(Diretoria *diretoria) {
-  try {
-    // Usamos o caminho da diretoria recebida
-    for (auto &entry : fs::directory_iterator(diretoria->getCaminho())) {
+  for (const auto &entry : fs::directory_iterator(diretoria->getCaminho())) {
 
-      string nome = entry.path().filename().string();
-      string caminhoCompleto = entry.path().string();
+    string nome = entry.path().filename().string();
+    string caminhoCompleto = entry.path().string();
 
-      if (fs::is_directory(entry.path())) {
-        auto sub = make_unique<Diretoria>(nome, caminhoCompleto);
-        carregarConteudo(sub.get()); // chamada recursiva com o parâmetro
-        diretoria->adicionar(move(sub));
-      } else if (fs::is_regular_file(entry.path())) {
-        diretoria->adicionar(make_unique<Ficheiro>(nome, caminhoCompleto));
-      }
+    if (entry.is_directory()) {
+      auto sub = make_unique<Diretoria>(nome, caminhoCompleto);
+      carregarConteudo(sub.get());
+      diretoria->adicionar(move(sub));
+    } else if (entry.is_regular_file()) {
+      diretoria->adicionar(make_unique<Ficheiro>(nome, caminhoCompleto));
     }
-  } catch (const exception &e) {
-    ostringstream ss;
-    ss << "Erro ao carregar diretoria " << diretoria->getCaminho() << ": "
-       << e.what();
-
-    Logger::log(Logger::Level::ERROR_, ss.str());
   }
 }
 
@@ -162,15 +153,15 @@ void SistemaFicheiros::ficheiroMaiorRec(Diretoria *dir, uintmax_t &tamMax,
  * - int: A quantidade total de memória ocupada pelos ficheiros.
  * Retorna 0 se a diretoria for nula.
  */
-int SistemaFicheiros::memoriaRec(Diretoria *dir) {
+uintmax_t SistemaFicheiros::memoriaRec(Diretoria *dir) {
   if (!dir)
     return 0;
 
-  int total = 0;
+  uintmax_t total = 0;
 
   for (const auto &item : dir->getConteudo()) {
     if (item->getIsFicheiro()) {
-      total += sizeof(*item);
+      total += item->getTamanho();
     } else {
       Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
       if (subdir) {
@@ -203,7 +194,7 @@ string SistemaFicheiros::maiorDiretoriaRec(Diretoria *dir, size_t &maior) {
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
       Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
-      size_t nItem = dir->getNItens();
+      size_t nItem = subdir->getNItens();
       if (nItem > localMax) {
         localMax = nItem;
         localName = subdir->getNome();
@@ -286,11 +277,13 @@ string SistemaFicheiros::menorDiretoriaRec(Diretoria *dir, size_t &menor) {
 void SistemaFicheiros::diretoriaMaisEspaco(Diretoria *dir, uintmax_t &tamMax,
                                            string &strMax) {
   for (const auto &c : dir->getConteudo()) {
-    if (!(c->getIsFicheiro())) {
+    if (!c->getIsFicheiro()) {
       if (c->getTamanho() > tamMax) {
         tamMax = c->getTamanho();
         strMax = c->getCaminho();
       }
+      if (auto *subdiretoria = dynamic_cast<Diretoria *>(c.get()))
+        diretoriaMaisEspaco(subdiretoria, tamMax, strMax);
     }
   }
 }
@@ -426,24 +419,39 @@ bool SistemaFicheiros::RemovePorNome(Diretoria *dir, const string &s,
   list<string> lres;
   pesquisarItensComNomeIgualRec(dir, lres, s, t);
 
+  if (!t) {
+    const string caminhoRaiz = Utils::NormalizarCaminho(dir->getCaminho());
+    lres.remove_if([&caminhoRaiz](const string &caminho) {
+      return Utils::NormalizarCaminho(caminho) == caminhoRaiz;
+    });
+  }
+
   Utils::PrintListaString(lres);
 
   if (lres.empty()) {
     return false;
   }
 
-  for (auto itLista = lres.begin(); itLista != lres.end(); ++itLista) {
-    if (!removerPorCaminho(dir, *itLista)) {
-      return false;
+  if (!t)
+    lres.sort([](const string &left, const string &right) {
+      return fs::path(left).lexically_normal().native().size() >
+             fs::path(right).lexically_normal().native().size();
+    });
+
+  for (const string &caminho : lres) {
+    if (fs && operarNoDisco) {
+      error_code error;
+      bool removidoNoDisco = false;
+      if (t)
+        removidoNoDisco = fs::remove(fs::path(caminho), error);
+      else
+        removidoNoDisco = fs::remove_all(fs::path(caminho), error) > 0;
+      if (error || !removidoNoDisco)
+        return false;
     }
 
-    if (fs && operarNoDisco) {
-      try {
-        fs::remove(Utils::NormalizarCaminho(*itLista));
-      } catch (...) {
-        return false;
-      }
-    }
+    if (!removerPorCaminho(dir, caminho))
+      return false;
   }
 
   return true;
@@ -473,7 +481,7 @@ bool SistemaFicheiros::removerPorCaminho(Diretoria *dir,
 
     if (Utils::NormalizarCaminho(item->getCaminho()) ==
         Utils::NormalizarCaminho(caminho)) {
-      dir->getConteudo().erase(it);
+      dir->extrair(item);
       return true;
     }
 
@@ -569,6 +577,39 @@ Item *SistemaFicheiros::procurarItemRec(Diretoria *dir,
   return nullptr;
 }
 
+Diretoria *SistemaFicheiros::procurarDiretoriaPai(Diretoria *dir,
+                                                   const Item *item) {
+  if (!dir || !item)
+    return nullptr;
+
+  for (const auto &conteudo : dir->getConteudo()) {
+    if (conteudo.get() == item)
+      return dir;
+
+    if (auto *subdiretoria = dynamic_cast<Diretoria *>(conteudo.get())) {
+      if (Diretoria *pai = procurarDiretoriaPai(subdiretoria, item))
+        return pai;
+    }
+  }
+  return nullptr;
+}
+
+bool SistemaFicheiros::contemDiretoria(Diretoria *origem,
+                                       const Diretoria *procurada) {
+  if (!origem || !procurada)
+    return false;
+  if (origem == procurada)
+    return true;
+
+  for (const auto &item : origem->getConteudo()) {
+    if (auto *subdiretoria = dynamic_cast<Diretoria *>(item.get())) {
+      if (contemDiretoria(subdiretoria, procurada))
+        return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Resumo:
  * Remove um item (ficheiro ou diretoria) com o nome especificado da diretoria
@@ -584,13 +625,9 @@ Item *SistemaFicheiros::procurarItemRec(Diretoria *dir,
  */
 unique_ptr<Item> SistemaFicheiros::extrairItemPorNome(Diretoria *dir,
                                                        const string &nome) {
-  for (auto it = dir->getConteudo().begin(); it != dir->getConteudo().end();
-       ++it) {
-    if ((*it)->getNome() == nome) {
-      auto item = move(*it);
-      dir->getConteudo().erase(it);
-      return item;
-    }
+  for (const auto &item : dir->getConteudo()) {
+    if (item->getNome() == nome)
+      return dir->extrair(item.get());
   }
   return nullptr;
 }
@@ -827,19 +864,26 @@ bool SistemaFicheiros::VerificarDuplicadosRec(Diretoria *dir,
 void SistemaFicheiros::AlterarNomeDuplicado(
     Diretoria *dir, unordered_map<string, int> &contador) {
   for (const auto &item : dir->getConteudo()) {
-    if (contador[item->getNome()] == 0) {
-      contador[item->getNome()] = 1;
-    } else {
-      // se ja existe, gera um nome com sufixo
-      int n = contador[item->getNome()]++;
-      if (item->getIsFicheiro()) {
-        Ficheiro *f = dynamic_cast<Ficheiro *>(item.get());
-        item->setNome(
-            Utils::alterarNomeDuplicado(item->getNome(), n, f->getExtensao()));
-      } else {
-        item->setNome(Utils::alterarNomeDuplicado(item->getNome(), n, ""));
-      }
+    const string nomeOriginal = item->getNome();
+    int &proximoNumero = contador[nomeOriginal];
+    if (proximoNumero == 0) {
+      proximoNumero = 1;
+      continue;
     }
+
+    string candidato;
+    do {
+      if (item->getIsFicheiro()) {
+        const auto *ficheiro = dynamic_cast<const Ficheiro *>(item.get());
+        candidato = Utils::alterarNomeDuplicado(
+            nomeOriginal, proximoNumero++, ficheiro->getExtensao());
+      } else {
+        candidato = nomeOriginal + Utils::gerarSufixo(proximoNumero++);
+      }
+    } while (contador[candidato] != 0);
+
+    contador[candidato] = 1;
+    item->setNome(candidato);
   }
 }
 
@@ -866,9 +910,10 @@ void SistemaFicheiros::AlterarNomeDuplicado(
  * Retorno:
  * - void (Não retorna valor).
  */
-void SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
+bool SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
                                      const string &padrao, bool disco,
                                      bool operarNoDisco) {
+  bool sucesso = true;
   for (const auto &item : dirOrigem->getConteudo()) {
     if (item->getIsFicheiro()) {
       Ficheiro *f = dynamic_cast<Ficheiro *>(item.get());
@@ -878,37 +923,33 @@ void SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
 
       // 1. Criar objeto em memória
       auto copia = make_unique<Ficheiro>(*f);
-      Ficheiro *copiaPtr = copia.get();
+      const fs::path caminhoDestino =
+          fs::path(destino->getCaminho()) / copia->getNome();
 
-      destino->adicionar(move(copia));
-
-      // 2. Copiar para disco na diretoria destino existente
       if (disco && operarNoDisco) {
         try {
-          fs::copy_file(f->getCaminho(),
-                        destino->getCaminho() + "/" +
-                            Utils::nomeAteParentese(f->getNome()) +
-                            f->getExtensao());
-          fs::rename(destino->getCaminho() + "/" +
-                         Utils::nomeAteParentese(f->getNome()) +
-                         f->getExtensao(),
-                     destino->getCaminho() + "/" + f->getNome());
+          fs::copy_file(f->getCaminho(), caminhoDestino);
         } catch (const exception &e) {
           ostringstream ss;
           ss << "Erro ao copiar ficheiro " << f->getCaminho() << " para "
              << destino->getCaminho() + "/" + f->getNome() << ": " << e.what();
 
           Logger::log(Logger::Level::ERROR_, ss.str());
+          sucesso = false;
+          continue;
         }
       }
-      // Atualizar o caminho do ficheiro copiado
-      copiaPtr->setCaminho(destino->getCaminho() + "/" + f->getNome());
+
+      copia->setCaminho(caminhoDestino.string());
+      destino->adicionar(move(copia));
     } else {
       // Recursão: percorrer subdiretórios
       Diretoria *d = dynamic_cast<Diretoria *>(item.get());
-      copiarItemRec(d, destino, padrao, disco, operarNoDisco);
+      if (!copiarItemRec(d, destino, padrao, disco, operarNoDisco))
+        sucesso = false;
     }
   }
+  return sucesso;
 }
 
 //==================== Métodos Públicos ====================
@@ -929,28 +970,22 @@ void SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
  * ou 'false' se o caminho for inválido ou ocorrer uma exceção.
  */
 bool SistemaFicheiros::Load(const string &path) {
-
-  if (!fs::exists(path) || !fs::is_directory(path)) {
+  error_code error;
+  const fs::path caminho = fs::weakly_canonical(fs::path(path), error);
+  if (error || !fs::is_directory(caminho, error) || error) {
     cerr << "Erro: caminho inválido -> " << path << endl;
     return false;
   }
 
-  string nome = Utils::extrairNome(path);
-
-  if (nome == path) // se deu erro na função Utils::extrairNome
+  const string nome = caminho.filename().string();
+  if (nome.empty())
     return false;
 
-  if (raiz) {
-    raiz.reset();
-    Logger::log(
-        Logger::Level::INFO,
-        "Memória do sistema de ficheiros limpa para novo carregamento.");
-  }
-
   try {
-    raiz = make_unique<Diretoria>(nome, path);
-
-    carregarConteudo(raiz.get());
+    auto novaRaiz = make_unique<Diretoria>(nome, caminho.string());
+    carregarConteudo(novaRaiz.get());
+    novaRaiz->recalcularTamanho();
+    raiz = move(novaRaiz);
   } catch (const exception &e) {
     ostringstream ss;
     ss << "Erro ao carregar sistema de ficheiros: " << e.what();
@@ -1002,8 +1037,8 @@ int SistemaFicheiros::ContarDirectorias() {
 }
 
 /* Resumo:
- * Método público que retorna a quantidade total de memória (em bytes)
- * ocupada por todos os ficheiros e diretorias carregados no sistema.
+ * Método público que retorna a quantidade total de espaço (em bytes)
+ * ocupada pelos ficheiros carregados no sistema.
  * Delega o cálculo para a função recursiva interna 'memoriaRec'.
  *
  * Parâmetros:
@@ -1014,8 +1049,9 @@ int SistemaFicheiros::ContarDirectorias() {
  * não tiver sido carregado (raiz nula).
  */
 int SistemaFicheiros::Memoria() {
-  // return raiz->getTamanho();
-  return memoriaRec(raiz.get());
+  const uintmax_t total = memoriaRec(raiz.get());
+  const auto limite = static_cast<uintmax_t>(numeric_limits<int>::max());
+  return static_cast<int>(min(total, limite));
 }
 
 /**
@@ -1156,7 +1192,13 @@ string *SistemaFicheiros::Search(const string &s, int Tipo) {
  * foram encontrados e removidos), ou 'false' caso contrário.
  */
 bool SistemaFicheiros::RemoverAll(const string &s, const string &tipo) {
-  return RemovePorNome(raiz.get(), s, tipo, false, importacao_diretoria);
+  if (!raiz)
+    return false;
+  const bool removido =
+      RemovePorNome(raiz.get(), s, tipo, true, importacao_diretoria);
+  if (removido)
+    raiz->recalcularTamanho();
+  return removido;
 }
 
 /**
@@ -1172,6 +1214,11 @@ bool SistemaFicheiros::RemoverAll(const string &s, const string &tipo) {
  * - void (Não retorna valor).
  */
 void SistemaFicheiros::Escrever_XML(const string &s) {
+  if (!raiz) {
+    Logger::log(Logger::Level::ERROR_,
+                "Não é possível exportar um sistema não carregado.");
+    return;
+  }
   XML XML;
   XML.WriteStartDocument(s);
   escreverXMLRec(raiz.get(), &XML);
@@ -1181,8 +1228,8 @@ void SistemaFicheiros::Escrever_XML(const string &s) {
 /**
  * Resumo:
  * Importa a estrutura do sistema de ficheiros a partir de um ficheiro XML.
- * Se já existir uma estrutura carregada, esta é apagada antes da importação.
- * Utiliza a classe XML para ler e interpretar o conteúdo do ficheiro XML.
+ * A nova árvore é construída temporariamente e apenas substitui o estado atual
+ * depois de o documento ser validado e lido por completo.
  *
  * Parâmetros:
  * - s (const string&): O nome do ficheiro XML de onde os dados serão
@@ -1193,8 +1240,6 @@ void SistemaFicheiros::Escrever_XML(const string &s) {
  * contrário.
  */
 bool SistemaFicheiros::Ler_XML(const string &s) {
-  raiz.reset();
-
   XML xmlParser;
   ifstream ficheiro = xmlParser.ImportDocument(s);
 
@@ -1208,37 +1253,36 @@ bool SistemaFicheiros::Ler_XML(const string &s) {
       "<diretoria\\s+nome=\"([^\"]+)\"\\s+tamanho=\"([^\"]+)\">");
   smatch match;
 
-  bool raizEncontrada = false; // Flag de controlo
+  try {
+    while (getline(ficheiro, linha)) {
+      if (!linha.empty() && linha.back() == '\r')
+        linha.pop_back();
 
-  while (getline(ficheiro, linha)) {
-    // Remove CR do Windows (Cross-platform fix)
-    if (!linha.empty() && linha.back() == '\r') {
-      linha.pop_back();
+      if (regex_search(linha, match, regexDiretoriaAberta)) {
+        const string nome = match[1];
+        auto novaRaiz = make_unique<Diretoria>(nome, "./" + nome);
+
+        if (!xmlParser.ReadDirectory(ficheiro, novaRaiz.get())) {
+          Logger::log(Logger::Level::ERROR_,
+                      "XML inválido ou incompleto: " + s);
+          return false;
+        }
+
+        novaRaiz->recalcularTamanho();
+        raiz = move(novaRaiz);
+        importacao_diretoria = false;
+        return true;
+      }
     }
-
-    if (regex_search(linha, match, regexDiretoriaAberta)) {
-      string nome = match[1];
-      // int tamanho = stoi(match[2]);
-
-      raiz = make_unique<Diretoria>(nome, "./" + nome);
-
-      xmlParser.ReadDirectory(ficheiro, raiz.get());
-
-      raizEncontrada = true;
-      break; // Já lemos a árvore toda (recursivamente), podemos sair
-    }
-  }
-
-  ficheiro.close();
-
-  // 3. Verificação Final (Correção do Bug)
-  if (!raizEncontrada) {
+  } catch (const exception &e) {
     Logger::log(Logger::Level::ERROR_,
-                "XML inválido: Nenhuma diretoria raiz encontrada em " + s);
+                "Erro ao interpretar XML '" + s + "': " + e.what());
     return false;
   }
 
-  return true;
+  Logger::log(Logger::Level::ERROR_,
+              "XML inválido: Nenhuma diretoria raiz encontrada em " + s);
+  return false;
 }
 
 /**
@@ -1261,6 +1305,9 @@ bool SistemaFicheiros::Ler_XML(const string &s) {
  * regista erro no Logger caso falhe a validação ou ocorra erro de I/O.
  */
 bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
+  if (!raiz)
+    return false;
+
   Item *item =
       procurarItemRec(raiz.get(), Fich, false); // procurar ficheiro pretendido
   if (!item) {
@@ -1301,23 +1348,10 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
     }
   }
 
-  string nomeDirItem = Utils::NomeDiretoriadoItem(
-      item->getCaminho(),
-      raiz->getNome()); // localizar diretoria atual do ficheiro
-
-  Diretoria *diretoriaAntiga = nullptr;
-
-  // Se a diretoria antiga for a raiz
-  if (nomeDirItem == raiz->getNome()) {
-    diretoriaAntiga = raiz.get();
-  } else {
-    // procura recursivamente
-    Item *dirAntigaItem = procurarItemRec(raiz.get(), nomeDirItem, true);
-    diretoriaAntiga = dynamic_cast<Diretoria *>(dirAntigaItem);
-  }
+  Diretoria *diretoriaAntiga = procurarDiretoriaPai(raiz.get(), item);
   if (!diretoriaAntiga) {
     Logger::log(Logger::Level::ERROR_,
-                "Erro: diretoria antiga '" + nomeDirItem + "' não encontrada.");
+                "Erro: diretoria de origem do ficheiro não encontrada.");
     return false;
   }
 
@@ -1328,14 +1362,12 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
     return false;
   }
 
-  string caminhoAntigo = item->getCaminho(); // guardar caminho antigo
-  string novoCaminho =
-      dirNova->getCaminho() + "/" + item->getNome(); // construir novo caminho
+  const fs::path caminhoAntigo(item->getCaminho());
+  const fs::path novoCaminho = fs::path(dirNova->getCaminho()) / item->getNome();
 
   if (importacao_diretoria) {
     try {
-      fs::rename(caminhoAntigo,
-                 novoCaminho); // mover no filesystem ANTES de mudar em memória
+      fs::rename(caminhoAntigo, novoCaminho);
     } catch (const fs::filesystem_error &e) {
       Logger::log(Logger::Level::ERROR_,
                   "Erro ao mover ficheiro: " + string(e.what()));
@@ -1345,14 +1377,20 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
 
   // remover o item da diretoria antiga
   auto itemMovido = extrairItemPorNome(diretoriaAntiga, item->getNome());
-  if (!itemMovido)
+  if (!itemMovido) {
+    if (importacao_diretoria) {
+      error_code rollbackError;
+      fs::rename(novoCaminho, caminhoAntigo, rollbackError);
+    }
     return false;
+  }
 
   // adicionar o item à nova diretoria
   Item *itemMovidoPtr = itemMovido.get();
   dirNova->adicionar(move(itemMovido));
 
-  itemMovidoPtr->setCaminho(novoCaminho); // atualizar caminho APÓS o rename
+  itemMovidoPtr->setCaminho(novoCaminho.string());
+  raiz->recalcularTamanho();
 
   cout << "Ficheiro '" << Fich << "' movido com sucesso para '" << DirNova
        << "'.\n";
@@ -1381,6 +1419,8 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
  */
 bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
                                        const string &DirNew) {
+  if (!raiz)
+    return false;
 
   Item *item = procurarItemRec(raiz.get(), DirOld, true);
   if (!item) {
@@ -1416,36 +1456,32 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
     return false;
   }
 
-  // impedir mover para si própria ou para subdiretoria
-  if (itemDir->getCaminho() == dirNova->getCaminho() ||
-      Utils::contemPalavra(dirNova->getCaminho(),
-                           itemDir->getCaminho() + "/")) {
+  // impedir mover para si própria ou para uma subdiretoria
+  if (contemDiretoria(itemDir, dirNova)) {
     Logger::log(Logger::Level::ERROR_,
                 "Erro: não é possível mover uma diretoria para ela mesma ou "
                 "para uma subdiretoria dela.");
     return false;
   }
 
-  string nomeDirItem =
-      Utils::NomeDiretoriadoItem(itemDir->getCaminho(), raiz->getNome());
-
-  Diretoria *diretoriaAntiga = nullptr;
-
-  if (nomeDirItem == raiz->getNome()) {
-    diretoriaAntiga = raiz.get();
-  } else {
-    Item *dirAntigaItem = procurarItemRec(raiz.get(), nomeDirItem, true);
-    diretoriaAntiga = dynamic_cast<Diretoria *>(dirAntigaItem);
+  for (const auto &conteudo : dirNova->getConteudo()) {
+    if (conteudo->getNome() == itemDir->getNome()) {
+      Logger::log(Logger::Level::ERROR_,
+                  "Erro: já existe um item com o mesmo nome no destino.");
+      return false;
+    }
   }
+
+  Diretoria *diretoriaAntiga = procurarDiretoriaPai(raiz.get(), itemDir);
 
   if (!diretoriaAntiga) {
     Logger::log(Logger::Level::ERROR_,
-                "Erro: diretoria antiga '" + nomeDirItem + "' não encontrada.");
+                "Erro: diretoria de origem não encontrada.");
     return false;
   }
 
-  string caminhoAntigo = itemDir->getCaminho();
-  string novoCaminho = dirNova->getCaminho() + "/" + itemDir->getNome();
+  const fs::path caminhoAntigo(itemDir->getCaminho());
+  const fs::path novoCaminho = fs::path(dirNova->getCaminho()) / itemDir->getNome();
 
   // mover no sistema de ficheiros
   if (importacao_diretoria) {
@@ -1460,14 +1496,21 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
 
   // atualizar estrutura da árvore (REMOVER + ADICIONAR apenas uma vez!)
   auto diretoriaMovida = extrairItemPorNome(diretoriaAntiga, itemDir->getNome());
-  if (!diretoriaMovida)
+  if (!diretoriaMovida) {
+    if (importacao_diretoria) {
+      error_code rollbackError;
+      fs::rename(novoCaminho, caminhoAntigo, rollbackError);
+    }
     return false;
+  }
   Diretoria *diretoriaMovidaPtr =
       dynamic_cast<Diretoria *>(diretoriaMovida.get());
   dirNova->adicionar(move(diretoriaMovida));
 
   // atualizar caminhos internos
-  setCaminhoRec(diretoriaMovidaPtr, novoCaminho);
+  string novoCaminhoString = novoCaminho.string();
+  setCaminhoRec(diretoriaMovidaPtr, novoCaminhoString);
+  raiz->recalcularTamanho();
 
   cout << "Diretoria '" << DirOld << "' movida com sucesso!\n";
   return true;
@@ -1513,6 +1556,9 @@ string *SistemaFicheiros::DataFicheiro(const string &ficheiro) {
  * - void (Não retorna valor).
  */
 void SistemaFicheiros::Tree(const string *fich) {
+  if (!raiz)
+    return;
+
   const string ficheiroPadrao = "tree.txt";
   const string &destino = fich ? *fich : ficheiroPadrao;
   size_t nivel = 0;
@@ -1548,6 +1594,8 @@ void SistemaFicheiros::Tree(const string *fich) {
 void SistemaFicheiros::PesquisarAllDirectorias(list<string> &lres,
                                                const string &dir) {
   lres.clear(); // limpa potenciais resultados antigos que possam estar na lista
+  if (!raiz)
+    return;
   pesquisarItensComNomeIgualRec(raiz.get(), lres, dir, false);
 }
 
@@ -1572,6 +1620,8 @@ void SistemaFicheiros::PesquisarAllDirectorias(list<string> &lres,
 void SistemaFicheiros::PesquisarAllFicheiros(list<string> &lres,
                                              const string &file) {
   lres.clear(); // limpa potenciais resultados antigos que possam estar na lista
+  if (!raiz)
+    return;
   pesquisarItensComNomeIgualRec(raiz.get(), lres, file, true);
 }
 
@@ -1622,6 +1672,8 @@ void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
  * ou 'false' se todos os nomes forem únicos.
  */
 bool SistemaFicheiros::FicheiroDuplicados() {
+  if (!raiz)
+    return false;
   unordered_set<string> nomes; // guarda nomes únicos~
   return VerificarDuplicadosRec(raiz.get(), nomes);
 }
@@ -1648,6 +1700,8 @@ bool SistemaFicheiros::FicheiroDuplicados() {
  */
 bool SistemaFicheiros::CopyBatch(const string &padrao, const string &DirOrigem,
                                  const string &DirDestino) {
+  if (!raiz)
+    return false;
   Item *diretoriaOrigem = procurarItemRec(raiz.get(), DirOrigem, true);
   if (!diretoriaOrigem) {
     Logger::log(Logger::Level::ERROR_, "Erro: diretoria de origem '" +
@@ -1680,9 +1734,12 @@ bool SistemaFicheiros::CopyBatch(const string &padrao, const string &DirOrigem,
   auto temp = make_unique<Diretoria>("temp", dirOrigem->getCaminho());
 
   copiarItemRec(dirOrigem, temp.get(), padrao, false, importacao_diretoria);
-  AlterarNomeDuplicado(dirDestino, contador);
+  for (const auto &item : dirDestino->getConteudo())
+    ++contador[item->getNome()];
   AlterarNomeDuplicado(temp.get(), contador);
-  copiarItemRec(temp.get(), dirDestino, padrao, true, importacao_diretoria);
+  const bool sucesso = copiarItemRec(temp.get(), dirDestino, padrao, true,
+                                     importacao_diretoria);
 
-  return true;
+  raiz->recalcularTamanho();
+  return sucesso;
 }

@@ -87,5 +87,17 @@ for compatibility. Internally, recursive searches use values and
 `std::optional`, and callers immediately wrap compatibility results in
 `std::unique_ptr`.
 
+## Operational safety
+
+Operations that affect the physical file system are exercised only inside
+temporary test fixtures. The implementation maintains these invariants:
+
+- failed directory loads and XML imports preserve the previously loaded tree;
+- file and directory moves reject duplicates and cyclic directory moves;
+- failed physical moves attempt to roll back before returning an error;
+- removals update the disk before committing the in-memory change;
+- batch copies add an in-memory item only after its physical copy succeeds;
+- directory sizes and total file bytes are recalculated after mutations.
+
 The architecture overview and usage examples will be expanded as the
 portfolio refactoring progresses.

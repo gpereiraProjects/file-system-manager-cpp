@@ -65,19 +65,37 @@ void testLoadAndStatistics() {
          "The fixture should contain two files");
   expect(fileSystem.ContarDirectorias() == 3,
          "Directory count should include the root and two children");
-  expect(fileSystem.Memoria() > 0,
-         "The current memory metric should be positive for loaded files");
+  expect(fileSystem.Memoria() == 12,
+         "Memory usage should equal the total file size in bytes");
+
+  std::unique_ptr<std::string> mostItems(
+      fileSystem.DirectoriaMaisElementos());
+  expect(mostItems != nullptr && *mostItems == fixture.root.filename().string(),
+         "The root should contain the greatest number of direct items");
+
+  std::unique_ptr<std::string> fewestItems(
+      fileSystem.DirectoriaMenosElementos());
+  expect(fewestItems != nullptr && *fewestItems == "empty",
+         "The empty directory should contain the fewest items");
+
+  std::unique_ptr<std::string> mostSpace(fileSystem.DirectoriaMaisEspaco());
+  expect(mostSpace != nullptr && fs::path(*mostSpace).filename() == "documents",
+         "The documents directory should occupy the most space");
 }
 
 void testInvalidDirectoryIsRejected() {
   TemporaryFixture fixture;
   SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
   const fs::path missing = fixture.root / "does-not-exist";
 
   expect(!fileSystem.Load(missing.string()),
          "A missing directory should be rejected");
-  expect(fileSystem.ContarFicheiros() == 0,
-         "A rejected initial load should leave the system empty");
+  expect(fileSystem.ContarFicheiros() == 2,
+         "A rejected load should preserve the previous state");
+  std::unique_ptr<std::string> preserved(fileSystem.Search("small.txt", 0));
+  expect(preserved != nullptr,
+         "Previously loaded items should survive a rejected load");
 }
 
 void testSearchAndLargestFile() {
@@ -169,6 +187,141 @@ void testOwnershipTransfersRemainValid() {
          "The moved directory should remain searchable");
   expect(fs::path(*movedDirectory).parent_path().filename() == "empty",
          "The moved directory path should reference its new parent");
+
+  std::unique_ptr<std::string> largestDirectory(
+      fileSystem.DirectoriaMaisEspaco());
+  expect(largestDirectory != nullptr,
+         "The largest directory query should return a result");
+  expect(fs::path(*largestDirectory).filename() == "empty",
+         "Directory sizes should be recalculated after ownership transfers");
+}
+
+void testInvalidXmlPreservesState() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  const fs::path invalidXml = fixture.root / "invalid.xml";
+  {
+    std::ofstream output(invalidXml);
+    output << "<?xml version=\"1.0\"?>\n"
+              "<diretoria nome=\"broken\" tamanho=\"1\">\n"
+              "  <ficheiro nome=\"partial.txt\" tamanho=\"1\" "
+              "extensao=\"txt\" dataModificacao=\"2026|01|01\"></ficheiro>\n";
+  }
+
+  expect(!fileSystem.Ler_XML(invalidXml.string()),
+         "An incomplete XML document should be rejected");
+  expect(fileSystem.ContarFicheiros() == 2,
+         "A rejected XML import should preserve the previous state");
+  std::unique_ptr<std::string> original(fileSystem.Search("small.txt", 0));
+  expect(original != nullptr,
+         "Original data should remain available after invalid XML");
+}
+
+void testCyclicDirectoryMoveIsRejected() {
+  TemporaryFixture fixture;
+  fs::create_directories(fixture.root / "documents" / "nested");
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+  expect(!fileSystem.MoverDirectoria("documents", "nested"),
+         "A directory must not be moved into its own subtree");
+  expect(fileSystem.ContarDirectorias() == 4,
+         "A rejected cyclic move should preserve the tree");
+  expect(fs::exists(fixture.root / "documents" / "nested"),
+         "A rejected cyclic move should preserve the physical directory");
+}
+
+void testRemovalUpdatesStatistics() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  expect(fileSystem.RemoverAll("small.txt", "FICH"),
+         "An existing file should be removed from the in-memory tree");
+  expect(fileSystem.ContarFicheiros() == 1,
+         "Removal should update the file count");
+  expect(fileSystem.Memoria() == 9,
+         "Removal should update the total file size");
+  expect(!fs::exists(fixture.root / "small.txt"),
+         "Removal should keep the physical and in-memory trees consistent");
+}
+
+void testBatchCopyResolvesNameCollisions() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  expect(fileSystem.CopyBatch("largest", "documents", "empty"),
+         "The first batch copy should succeed");
+  expect(fs::exists(fixture.root / "empty" / "largest.bin"),
+         "The first copied file should use its original name");
+
+  expect(fileSystem.CopyBatch("largest", "documents", "empty"),
+         "A repeated batch copy should resolve the name collision");
+  expect(fs::exists(fixture.root / "empty" / "largest(001).bin"),
+         "The repeated copy should use a sequential suffix");
+  expect(fileSystem.CopyBatch("largest", "documents", "empty"),
+         "A third batch copy should resolve all existing collisions");
+  expect(fs::exists(fixture.root / "empty" / "largest(002).bin"),
+         "Sequential suffixes should skip names that already exist");
+  expect(fileSystem.ContarFicheiros() == 5,
+         "All successful copies should be represented in memory");
+  expect(fileSystem.Memoria() == 39,
+         "Batch copies should update the total file size");
+}
+
+void testRenameKeepsDiskAndMemoryConsistent() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  fileSystem.RenomearFicheiros("small.txt", "renamed.txt");
+  expect(!fs::exists(fixture.root / "small.txt"),
+         "The original physical filename should no longer exist");
+  expect(fs::exists(fixture.root / "renamed.txt"),
+         "The renamed physical file should exist");
+  std::unique_ptr<std::string> renamed(fileSystem.Search("renamed.txt", 0));
+  expect(renamed != nullptr,
+         "The renamed file should be represented in the in-memory tree");
+  expect(fileSystem.Search("small.txt", 0) == nullptr,
+         "The old filename should no longer be represented in memory");
+}
+
+void testRecursiveDirectoryRemoval() {
+  TemporaryFixture fixture;
+  fs::create_directories(fixture.root / "documents" / "nested");
+  {
+    std::ofstream output(fixture.root / "documents" / "nested" / "deep.txt");
+    output << "deep";
+  }
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+  expect(fileSystem.RemoverAll("documents", "DIR"),
+         "An existing directory subtree should be removed");
+  expect(!fs::exists(fixture.root / "documents"),
+         "Recursive removal should update the physical file system");
+  expect(fileSystem.ContarDirectorias() == 2,
+         "Recursive removal should update the directory count");
+  expect(fileSystem.ContarFicheiros() == 1,
+         "Recursive removal should discard all files in the subtree");
+  expect(fileSystem.Memoria() == 3,
+         "Recursive removal should recalculate the total file size");
+}
+
+void testRootDirectoryCannotBeRemoved() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  expect(!fileSystem.RemoverAll(fixture.root.filename().string(), "DIR"),
+         "The loaded root directory must not be removable");
+  expect(fs::exists(fixture.root),
+         "Rejecting root removal should preserve the physical directory");
+  expect(fileSystem.ContarFicheiros() == 2,
+         "Rejecting root removal should preserve the in-memory tree");
 }
 
 } // namespace
@@ -185,6 +338,13 @@ int main() {
       {"tree output", testTreeOutput},
       {"XML round-trip", testXmlRoundTrip},
       {"ownership transfers", testOwnershipTransfersRemainValid},
+      {"invalid XML transaction", testInvalidXmlPreservesState},
+      {"cyclic directory move", testCyclicDirectoryMoveIsRejected},
+      {"removal statistics", testRemovalUpdatesStatistics},
+      {"batch copy collisions", testBatchCopyResolvesNameCollisions},
+      {"rename consistency", testRenameKeepsDiskAndMemoryConsistent},
+      {"recursive directory removal", testRecursiveDirectoryRemoval},
+      {"root removal guard", testRootDirectoryCannotBeRemoved},
   };
 
   std::size_t failures = 0;
