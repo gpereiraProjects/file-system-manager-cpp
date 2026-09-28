@@ -4,6 +4,18 @@
 using namespace std;
 namespace fs = std::filesystem;
 
+namespace {
+
+bool localTime(const time_t &time, tm &result) {
+#ifdef _WIN32
+  return localtime_s(&result, &time) == 0;
+#else
+  return localtime_r(&time, &result) != nullptr;
+#endif
+}
+
+} // namespace
+
 //==================== Construtor e Destrutor ====================
 /**
  * Resumo:
@@ -35,9 +47,12 @@ Ficheiro::Ficheiro(const string &_nome, const string &_caminho)
         ftime - fs::file_time_type::clock::now() + chrono::system_clock::now());
     time_t tempo = chrono::system_clock::to_time_t(tmp);
 
-    stringstream ss;
+    tm local{};
+    if (!localTime(tempo, local))
+      throw runtime_error("Não foi possível converter a data do ficheiro.");
 
-    ss << put_time(localtime(&tempo), "%Y|%m|%d");
+    stringstream ss;
+    ss << put_time(&local, "%Y|%m|%d");
     dataModificacao = ss.str();
 
   } catch (const exception &e) {

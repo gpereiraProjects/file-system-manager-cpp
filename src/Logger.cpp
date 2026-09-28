@@ -3,6 +3,18 @@
 
 using namespace std;
 
+namespace {
+
+bool localTime(const time_t &time, tm &result) {
+#ifdef _WIN32
+    return localtime_s(&result, &time) == 0;
+#else
+    return localtime_r(&time, &result) != nullptr;
+#endif
+}
+
+} // namespace
+
 // Retorna a instância única do Logger (padrão Singleton)
 Logger& Logger::instance() {
     // Cria a instância estática apenas na primeira vez que a função é chamada
@@ -36,9 +48,13 @@ string Logger::levelToString(Level lvl) {
 // Cria um timestamp atual no formato "YYYY-MM-DD HH:MM:SS"
 string Logger::timestamp() {
     time_t t = time(nullptr);                        // obtém o tempo atual
+    tm local{};
+    if (!localTime(t, local))
+        return "timestamp-indisponivel";
     char buffer[32];                                 // buffer para armazenar a string
-    strftime(buffer, sizeof(buffer),                // formata o tempo
-             "%Y-%m-%d %H:%M:%S", localtime(&t));
+    if (strftime(buffer, sizeof(buffer),             // formata o tempo
+                 "%Y-%m-%d %H:%M:%S", &local) == 0)
+        return "timestamp-indisponivel";
     return buffer;                                   // devolve o timestamp como string
 }
 

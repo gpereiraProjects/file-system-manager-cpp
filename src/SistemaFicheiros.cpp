@@ -651,7 +651,8 @@ void SistemaFicheiros::setCaminhoRec(Diretoria *dir, string &caminhoDir) {
   dir->setCaminho(caminhoDir);
 
   for (const auto &item : dir->getConteudo()) {
-    string novoCaminho = caminhoDir + "/" + item->getNome();
+    string novoCaminho =
+        (fs::path(caminhoDir) / item->getNome()).string();
     item->setCaminho(novoCaminho);
 
     if (!item->getIsFicheiro()) {
@@ -934,7 +935,8 @@ bool SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
         } catch (const exception &e) {
           ostringstream ss;
           ss << "Erro ao copiar ficheiro " << f->getCaminho() << " para "
-             << destino->getCaminho() + "/" + f->getNome() << ": " << e.what();
+             << (fs::path(destino->getCaminho()) / f->getNome()).string()
+             << ": " << e.what();
 
           Logger::log(Logger::Level::ERROR_, ss.str());
           sucesso = false;

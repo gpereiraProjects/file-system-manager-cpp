@@ -5,23 +5,24 @@ memory and provides operations for inspecting, searching, moving, copying,
 renaming, exporting, and importing file-system data.
 
 This repository is being prepared as a portfolio version of an academic
-Object-Oriented Programming project. The implementation currently targets
-Windows because it uses the Windows console API.
+Object-Oriented Programming project. The implementation supports Windows,
+Linux, and macOS through the C++17 standard library and a small isolated
+Windows console adaptation.
 
 ## Requirements
 
 - CMake 3.22 or newer
-- A C++17 compiler, such as Visual Studio 2022 or MinGW-w64
+- A C++17 compiler, such as MSVC, GCC, or Clang
 - Ninja when using the included CMake presets
 
-The project is currently developed with the MSYS2 UCRT64 toolchain. Opening an
-MSYS2 UCRT64 terminal makes CMake, Ninja, and GCC available automatically.
+The project is currently developed with the MSYS2 UCRT64 toolchain on Windows,
+but the build does not depend on MSYS2 or Windows-specific project files.
 
 ## Build
 
 From a terminal opened in the repository root:
 
-```powershell
+```console
 cmake -S . -B build
 cmake --build build --config Release
 ```
@@ -30,18 +31,18 @@ The executable is generated under `build/bin`.
 
 Alternatively, use one of the included presets:
 
-```powershell
-cmake --preset windows-debug
-cmake --build --preset windows-debug
+```console
+cmake --preset debug
+cmake --build --preset debug
 ```
 
-Replace `windows-debug` with `windows-release` for an optimized build. Preset
+Replace `debug` with `release` for an optimized build. Preset
 executables are generated under `build/<preset>/bin`. Both presets treat
 compiler warnings as errors so regressions are detected during development.
 
 To enable warnings as errors:
 
-```powershell
+```console
 cmake -S . -B build -DFILE_SYSTEM_MANAGER_WARNINGS_AS_ERRORS=ON
 cmake --build build --config Release
 ```
@@ -61,10 +62,10 @@ cmake --build build --config Release
 
 Build the selected preset and run its test suite with CTest:
 
-```powershell
-cmake --preset windows-debug
-cmake --build --preset windows-debug
-ctest --test-dir build/windows-debug --output-on-failure
+```console
+cmake --preset debug
+cmake --build --preset debug
+ctest --test-dir build/debug --output-on-failure
 ```
 
 The current characterization suite protects directory loading, statistics,
@@ -127,5 +128,14 @@ directory totals, duplicate child names, multiple roots, unknown entities and
 names that could escape their parent path. Unsupported XML constructs are
 rejected rather than interpreted.
 
-The architecture overview and usage examples will be expanded as the
-portfolio refactoring progresses.
+## Portability
+
+Platform-independent paths are composed and normalized with
+`std::filesystem`. Console clearing uses ANSI terminal sequences, while the
+Windows-only UTF-8 and virtual-terminal setup is isolated inside `Utils.cpp`.
+Date conversion selects the thread-safe API provided by each operating system,
+and CMake links the platform's standard thread implementation through
+`Threads::Threads`.
+
+The continuous-integration workflow builds and tests the same source with
+MSVC on Windows, GCC on Linux, and Clang on macOS.

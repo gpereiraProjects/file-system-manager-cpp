@@ -16,13 +16,6 @@ option(FILE_SYSTEM_MANAGER_WARNINGS_AS_ERRORS
        "Treat compiler warnings as errors"
        OFF)
 
-if(NOT WIN32)
-    message(WARNING
-        "The current source code uses the Windows console API. "
-        "Cross-platform support will be added in a later refactoring."
-    )
-endif()
-
 set(FILE_SYSTEM_MANAGER_SOURCES
         src/Diretoria.cpp
         src/Ficheiro.cpp
@@ -35,11 +28,15 @@ set(FILE_SYSTEM_MANAGER_SOURCES
 
 add_library(file_system_manager_core STATIC ${FILE_SYSTEM_MANAGER_SOURCES})
 
+find_package(Threads REQUIRED)
+
 target_include_directories(
     file_system_manager_core
     PUBLIC
         "${PROJECT_SOURCE_DIR}/include"
 )
+
+target_link_libraries(file_system_manager_core PUBLIC Threads::Threads)
 
 function(file_system_manager_enable_warnings target_name)
     if(MSVC)

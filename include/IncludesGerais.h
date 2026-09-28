@@ -11,7 +11,6 @@
 #include <ctime>        // time_t, localtime
 #include <sstream>      // stringstream
 #include <iomanip>      // put_time
-#include <windows.h>
 #include <locale>
 #include <fstream>
 #include <climits>

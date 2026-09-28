@@ -1,5 +1,12 @@
 #include "Utils.h"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 using namespace std;
 namespace fs = std::filesystem;
 
@@ -28,10 +35,9 @@ string Utils::extrairNome(const string &path) {
 
 /**
  * Resumo:
- * Configura a consola (especificamente em ambiente Windows) para utilizar
- * a codificação de caracteres UTF-8. Define tanto a página de código de
- * saída (OutputCP) como a de entrada (CP), permitindo a correta exibição
- * e leitura de caracteres especiais (acentos, cedilhas, símbolos).
+ * Configura a consola para a apresentação da interface. No Windows, ativa
+ * UTF-8 e sequências ANSI; nos restantes sistemas, o terminal já fornece
+ * normalmente estas capacidades através do ambiente.
  *
  * Parâmetros:
  * - Nenhum.
@@ -40,8 +46,15 @@ string Utils::extrairNome(const string &path) {
  * - void (Não retorna valor).
  */
 void Utils::UTF8() {
+#ifdef _WIN32
   SetConsoleOutputCP(CP_UTF8);
-  SetConsoleCP(CP_UTF8); // input
+  SetConsoleCP(CP_UTF8);
+
+  const HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
+  DWORD mode = 0;
+  if (console != INVALID_HANDLE_VALUE && GetConsoleMode(console, &mode) != 0)
+    SetConsoleMode(console, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+#endif
 }
 
 /**
@@ -65,13 +78,9 @@ string Utils::Tabulacao(size_t n) {
 
 /**
  * Resumo:
- * Padroniza a formatação de um caminho de ficheiro para garantir consistência
- * nas comparações. Realiza três limpezas principais:
- * 1. Converte todas as barras invertidas ('\') do Windows para barras normais
- * ('/').
- * 2. Remove barras duplicadas acidentais (ex: "pasta//ficheiro" ->
- * "pasta/ficheiro").
- * 3. Remove a barra final se existir, para que diretorias não terminem em '/'.
+ * Normaliza lexicalmente um caminho através de std::filesystem e converte-o
+ * para o formato genérico apenas para comparação. Assim, cada plataforma
+ * mantém as suas próprias regras de separadores e diretórios raiz.
  *
  * Parâmetros:
  * - path (const string&): O caminho original "bruto" que se pretende limpar.
@@ -80,18 +89,7 @@ string Utils::Tabulacao(size_t n) {
  * - string: Uma nova string contendo o caminho normalizado.
  */
 string Utils::NormalizarCaminho(const string &path) {
-  string normalizado = path;
-  replace(normalizado.begin(), normalizado.end(), '\\', '/');
-
-  // Remove duplas barras //
-  while (normalizado.find("//") != string::npos)
-    normalizado.erase(normalizado.find("//"), 1);
-
-  // Remove / no fim
-  if (!normalizado.empty() && normalizado.back() == '/')
-    normalizado.pop_back();
-
-  return normalizado;
+  return fs::path(path).lexically_normal().generic_string();
 }
 
 /**
@@ -174,11 +172,7 @@ string Utils::alterarNomeDuplicado(string nome, int n, string extensao) {
 }
 
 void Utils::limparEcra() {
-#ifdef _WIN32
-  system("cls");
-#else
-  system("clear");
-#endif
+  cout << "\x1B[2J\x1B[H" << flush;
 }
 
 void Utils::esperarEnter() {

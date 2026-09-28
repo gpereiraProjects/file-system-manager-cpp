@@ -3,6 +3,7 @@
 #include "Item.h"
 #include "Logger.h"
 #include "SistemaFicheiros.h"
+#include "Utils.h"
 
 #include <chrono>
 #include <filesystem>
@@ -92,6 +93,20 @@ void testLoadAndStatistics() {
   std::unique_ptr<std::string> mostSpace(fileSystem.DirectoriaMaisEspaco());
   expect(mostSpace != nullptr && fs::path(*mostSpace).filename() == "documents",
          "The documents directory should occupy the most space");
+}
+
+void testPortablePathNormalization() {
+  const fs::path unnormalized =
+      fs::path("parent") / "." / "child" / ".." / "file.txt";
+  expect(Utils::NormalizarCaminho(unnormalized.string()) ==
+             unnormalized.lexically_normal().generic_string(),
+         "Path normalization should follow std::filesystem semantics");
+
+#ifndef _WIN32
+  expect(Utils::NormalizarCaminho("directory\\file.txt") ==
+             "directory\\file.txt",
+         "A backslash must remain a valid filename character on POSIX");
+#endif
 }
 
 void testInvalidDirectoryIsRejected() {
@@ -462,6 +477,7 @@ int main() {
 
   const std::vector<std::pair<std::string, std::function<void()>>> tests = {
       {"load and statistics", testLoadAndStatistics},
+      {"portable path normalization", testPortablePathNormalization},
       {"invalid directory", testInvalidDirectoryIsRejected},
       {"search and largest file", testSearchAndLargestFile},
       {"tree output", testTreeOutput},

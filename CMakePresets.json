@@ -7,22 +7,22 @@
   },
   "configurePresets": [
     {
-      "name": "windows-debug",
-      "displayName": "Windows Debug",
+      "name": "debug",
+      "displayName": "Debug",
       "description": "Debug build using Ninja and the active C++ toolchain",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/windows-debug",
+      "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "FILE_SYSTEM_MANAGER_WARNINGS_AS_ERRORS": true
       }
     },
     {
-      "name": "windows-release",
-      "displayName": "Windows Release",
+      "name": "release",
+      "displayName": "Release",
       "description": "Optimized release build using Ninja and the active C++ toolchain",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/windows-release",
+      "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "FILE_SYSTEM_MANAGER_WARNINGS_AS_ERRORS": true
@@ -31,13 +31,13 @@
   ],
   "buildPresets": [
     {
-      "name": "windows-debug",
-      "configurePreset": "windows-debug",
+      "name": "debug",
+      "configurePreset": "debug",
       "jobs": 0
     },
     {
-      "name": "windows-release",
-      "configurePreset": "windows-release",
+      "name": "release",
+      "configurePreset": "release",
       "jobs": 0
     }
   ]
