@@ -4,10 +4,32 @@
 #include "Utils.h"
 #include "XML.h"
 
+#include <cctype>
 #include <vector>
 
 using namespace std;
 namespace fs = std::filesystem;
+
+namespace {
+
+string identidadeDiretoria(const fs::path &path) {
+  error_code error;
+  fs::path canonicalPath = fs::canonical(path, error);
+  if (error)
+    throw fs::filesystem_error("Não foi possível identificar a diretoria",
+                               path, error);
+
+  string identity = canonicalPath.lexically_normal().generic_string();
+#ifdef _WIN32
+  transform(identity.begin(), identity.end(), identity.begin(),
+            [](const unsigned char character) {
+              return static_cast<char>(tolower(character));
+            });
+#endif
+  return identity;
+}
+
+} // namespace
 
 //==================== Construtor e Destrutor ====================
 SistemaFicheiros::SistemaFicheiros()
@@ -19,27 +41,55 @@ SistemaFicheiros::SistemaFicheiros()
  * Percorre recursivamente o sistema de ficheiros a partir do caminho da
  * diretoria fornecida. Para cada entrada encontrada (ficheiro ou pasta), cria o
  * respetivo objeto ('Ficheiro' ou 'Diretoria') e adiciona-o à estrutura em
- * memória. As exceções são propagadas para `Load`, que só substitui a árvore
+ * memória. Links simbólicos são ignorados e a identidade canónica de cada
+ * diretoria é registada para impedir ciclos através de aliases do sistema de
+ * ficheiros. As exceções são propagadas para `Load`, que só substitui a árvore
  * ativa depois de concluir todo o carregamento.
  *
  * Parâmetros:
- * - diretoria (Diretoria*): Ponteiro para o objeto diretoria que será
- * preenchido com o conteúdo encontrado no disco.
+ * - diretoria (Diretoria*): Objeto que será preenchido com o conteúdo.
+ * - diretoriasVisitadas: Identidades canónicas das diretorias já percorridas.
  *
  * Retorno:
  * - void (Não retorna valor).
  */
-void SistemaFicheiros::carregarConteudo(Diretoria *diretoria) {
+void SistemaFicheiros::carregarConteudo(
+    Diretoria *diretoria, unordered_set<string> &diretoriasVisitadas) {
   for (const auto &entry : fs::directory_iterator(diretoria->getCaminho())) {
-
     string nome = entry.path().filename().string();
     string caminhoCompleto = entry.path().string();
 
-    if (entry.is_directory()) {
+    error_code statusError;
+    const fs::file_status linkStatus = entry.symlink_status(statusError);
+    if (statusError)
+      throw fs::filesystem_error("Não foi possível consultar uma entrada",
+                                 entry.path(), statusError);
+
+    if (fs::is_symlink(linkStatus)) {
+      Logger::log(Logger::Level::INFO,
+                  "Link simbólico ignorado durante o carregamento: " +
+                      caminhoCompleto);
+      continue;
+    }
+
+    const fs::file_status targetStatus = entry.status(statusError);
+    if (statusError)
+      throw fs::filesystem_error("Não foi possível consultar uma entrada",
+                                 entry.path(), statusError);
+
+    if (fs::is_directory(targetStatus)) {
+      const string identity = identidadeDiretoria(entry.path());
+      if (!diretoriasVisitadas.insert(identity).second) {
+        Logger::log(Logger::Level::INFO,
+                    "Diretoria já visitada ignorada durante o carregamento: " +
+                        caminhoCompleto);
+        continue;
+      }
+
       auto sub = make_unique<Diretoria>(nome, caminhoCompleto);
-      carregarConteudo(sub.get());
+      carregarConteudo(sub.get(), diretoriasVisitadas);
       diretoria->adicionar(move(sub));
-    } else if (entry.is_regular_file()) {
+    } else if (fs::is_regular_file(targetStatus)) {
       diretoria->adicionar(make_unique<Ficheiro>(nome, caminhoCompleto));
     }
   }
@@ -908,7 +958,9 @@ bool SistemaFicheiros::Load(const string &path) {
 
   try {
     auto novaRaiz = make_unique<Diretoria>(nome, caminho.string());
-    carregarConteudo(novaRaiz.get());
+    unordered_set<string> diretoriasVisitadas;
+    diretoriasVisitadas.insert(identidadeDiretoria(caminho));
+    carregarConteudo(novaRaiz.get(), diretoriasVisitadas);
     novaRaiz->recalcularTamanho();
     raiz = move(novaRaiz);
   } catch (const exception &e) {

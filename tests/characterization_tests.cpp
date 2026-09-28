@@ -17,6 +17,16 @@
 #include <type_traits>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 static_assert(std::is_abstract_v<Item>,
               "Item must remain an abstract domain base class");
 static_assert(std::has_virtual_destructor_v<Item>,
@@ -95,6 +105,35 @@ void expect(bool condition, const std::string &message) {
   if (!condition) {
     throw std::runtime_error(message);
   }
+}
+
+bool createDirectorySymlinkForTest(const fs::path &target,
+                                   const fs::path &link,
+                                   std::error_code &error) {
+#ifdef _WIN32
+  constexpr DWORD allowUnprivilegedCreate = 0x2;
+  if (CreateSymbolicLinkW(link.c_str(), target.c_str(),
+                          SYMBOLIC_LINK_FLAG_DIRECTORY |
+                              allowUnprivilegedCreate) != 0) {
+    error.clear();
+    return true;
+  }
+
+  DWORD nativeError = GetLastError();
+  if (nativeError == ERROR_INVALID_PARAMETER &&
+      CreateSymbolicLinkW(link.c_str(), target.c_str(),
+                          SYMBOLIC_LINK_FLAG_DIRECTORY) != 0) {
+    error.clear();
+    return true;
+  }
+  nativeError = GetLastError();
+  error = std::error_code(static_cast<int>(nativeError),
+                          std::system_category());
+  return false;
+#else
+  fs::create_directory_symlink(target, link, error);
+  return !error;
+#endif
 }
 
 void testLoadAndStatistics() {
@@ -199,6 +238,31 @@ void testInvalidDirectoryIsRejected() {
   std::unique_ptr<std::string> preserved(fileSystem.Search("small.txt", 0));
   expect(preserved != nullptr,
          "Previously loaded items should survive a rejected load");
+}
+
+void testSymbolicLinkCyclesAreIgnored() {
+  TemporaryFixture fixture;
+  const fs::path cycle = fixture.root / "documents" / "back-to-root";
+  std::error_code linkError;
+  if (!createDirectorySymlinkForTest(fixture.root, cycle, linkError)) {
+    std::cout << "[INFO] symbolic-link test unavailable: "
+              << linkError.message() << '\n';
+    return;
+  }
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()),
+         "A tree containing a symbolic-link cycle should load safely");
+  expect(fileSystem.ContarDirectorias() == 3,
+         "A symbolic directory link must not become part of the loaded tree");
+  expect(fileSystem.ContarFicheiros() == 2,
+         "A symbolic-link cycle must not duplicate files");
+  expect(fileSystem.Memoria() == 12,
+         "A symbolic-link cycle must not duplicate file sizes");
+  std::unique_ptr<std::string> ignoredLink(
+      fileSystem.Search("back-to-root", 1));
+  expect(ignoredLink == nullptr,
+         "An ignored symbolic link must not be searchable as a directory");
 }
 
 void testSearchAndLargestFile() {
@@ -690,6 +754,7 @@ int main() {
       {"portable path normalization", testPortablePathNormalization},
       {"menu input and EOF", testMenuInputAndEndOfFileHandling},
       {"invalid directory", testInvalidDirectoryIsRejected},
+      {"symbolic-link cycle", testSymbolicLinkCyclesAreIgnored},
       {"search and largest file", testSearchAndLargestFile},
       {"tree output", testTreeOutput},
       {"XML round-trip", testXmlRoundTrip},

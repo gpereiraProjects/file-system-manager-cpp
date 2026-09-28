@@ -108,6 +108,8 @@ Operations that affect the physical file system are exercised only inside
 temporary test fixtures. The implementation maintains these invariants:
 
 - failed directory loads and XML imports preserve the previously loaded tree;
+- directory loading ignores symbolic links and records canonical directory
+  identities, preventing cycles and repeated traversal through aliases;
 - file and directory moves reject duplicates and cyclic directory moves;
 - failed physical moves attempt to roll back before returning an error;
 - removals update the disk before committing the in-memory change;

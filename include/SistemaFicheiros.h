@@ -48,7 +48,9 @@ private:
   std::unique_ptr<Diretoria> raiz;
   bool importacao_diretoria; // 1-diretoria, 0-xml
 
-  void carregarConteudo(Diretoria *diretoria); // utilizada no Load
+  void carregarConteudo(
+      Diretoria *diretoria,
+      std::unordered_set<std::string> &diretoriasVisitadas); // utilizada no Load
   int ContarFicheirosRec(Diretoria *dir);      // utilizada no ContarFicheiros
   int ContarDirectoriasRec(Diretoria *dir);    // utilizada no ContarDirectorias
   void ficheiroMaiorRec(Diretoria *dir, std::uintmax_t &tamMax,
