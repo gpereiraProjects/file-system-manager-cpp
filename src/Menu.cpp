@@ -115,7 +115,7 @@ bool Menu::MenuPesquisas(SistemaFicheiros &SF) {
     case 1: {
       Utils::limparEcra();
       cout << "===== PESQUISAR FICHEIRO/DIRETORIA =====\n";
-      cout << "Nome a pesquisar: ";
+      cout << "Caminho relativo à raiz: ";
       if (!LerTexto(nome))
         return false;
 
@@ -202,10 +202,10 @@ bool Menu::MenuMovimentos(SistemaFicheiros &SF) {
 
     switch (op) {
     case 1:
-      cout << "Ficheiro: ";
+      cout << "Caminho do ficheiro: ";
       if (!LerTexto(nome))
         return false;
-      cout << "Diretoria destino: ";
+      cout << "Caminho da diretoria destino ('.' para a raiz): ";
       if (!LerTexto(dest))
         return false;
       if (SF.MoveFicheiro(nome, dest)) {
@@ -217,10 +217,10 @@ bool Menu::MenuMovimentos(SistemaFicheiros &SF) {
       break;
 
     case 2:
-      cout << "Nome da diretoria: ";
+      cout << "Caminho da diretoria: ";
       if (!LerTexto(nome))
         return false;
-      cout << "Diretoria nova: ";
+      cout << "Caminho da diretoria destino ('.' para a raiz): ";
       if (!LerTexto(dest))
         return false;
       if (SF.MoverDirectoria(nome, dest)) {
@@ -350,7 +350,7 @@ bool Menu::MenuAvancado(SistemaFicheiros &SF) {
       break;
 
     case 3: // Mostrar data de ficheiro
-      cout << "Nome do ficheiro: ";
+      cout << "Caminho do ficheiro: ";
       if (!LerTexto(nome))
         return false;
       if (unique_ptr<string> d =

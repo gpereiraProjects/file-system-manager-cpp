@@ -344,76 +344,6 @@ void SistemaFicheiros::diretoriaMaisEspaco(Diretoria *dir, uintmax_t &tamMax,
 }
 
 /**
- * Resumo: Percorre recursivamente a hierarquia de diretorias para encontrar a
- * diretoria com o nome especificado.
- *
- * Parâmetros:
- * - dir (Diretoria*): Ponteiro para a diretoria atual na recursão.
- * - s (const string&): Nome da diretoria a ser pesquisada.
- *
- * Retorno:
- * - string*: Ponteiro para uma string contendo o caminho da diretoria
- * encontrada, ou nullptr se não encontrada.
- */
-optional<string> SistemaFicheiros::pesquisarDiretoriaRec(Diretoria *dir,
-                                                         const string &s) {
-  if (dir->getNome() == s) {
-    return dir->getCaminho();
-  }
-
-  for (const auto &item : dir->getConteudo()) {
-
-    if (!item->getIsFicheiro() && item->getNome() == s) {
-      return item->getCaminho();
-    }
-
-    if (!item->getIsFicheiro()) {
-      Diretoria *d = dynamic_cast<Diretoria *>(item.get());
-      if (d) {
-        optional<string> res = pesquisarDiretoriaRec(d, s);
-        if (res)
-          return res;
-      }
-    }
-  }
-
-  return nullopt;
-}
-
-/**
- * Resumo: Percorre recursivamente a hierarquia de diretorias para encontrar o
- * ficheiro com o nome especificado.
- *
- * Parâmetros:
- * - dir (Diretoria*): Ponteiro para a diretoria atual na recursão.
- * - s (const string&): Nome do ficheiro a ser pesquisado.
- *
- * Retorno:
- * - string*: Ponteiro para uma string contendo o caminho do ficheiro
- * encontrado, ou nullptr se não encontrado.
- */
-optional<string> SistemaFicheiros::pesquisarFicheiroRec(Diretoria *dir,
-                                                        const string &s) {
-  for (const auto &item : dir->getConteudo()) {
-
-    if (item->getIsFicheiro() && item->getNome() == s) {
-      return item->getCaminho();
-    }
-
-    if (!item->getIsFicheiro()) {
-      Diretoria *d = dynamic_cast<Diretoria *>(item.get());
-      if (d) {
-        optional<string> res = pesquisarFicheiroRec(d, s);
-        if (res)
-          return res;
-      }
-    }
-  }
-
-  return nullopt;
-}
-
-/**
  * Resumo:
  * Percorre recursivamente a hierarquia de diretorias para encontrar todos os
  * itens (ficheiros ou diretorias) que correspondam ao nome fornecido.
@@ -665,25 +595,55 @@ bool SistemaFicheiros::contemDiretoria(Diretoria *origem,
 }
 
 /**
- * Resumo:
- * Remove um item (ficheiro ou diretoria) com o nome especificado da diretoria
- * fornecida. Percorre a lista de conteúdos e, se encontrar um item com o nome
- * correspondente, remove-o da lista e retorna verdadeiro.
- *
- * Parâmetros:
- * - dir (Diretoria*): Ponteiro para a diretoria onde a remoção será feita.
- * - nome (const string&): Nome do item a ser removido.
- *
- * Retorno:
- * - bool: Verdadeiro se o item foi encontrado e removido, falso caso contrário.
+ * Resolve um caminho absoluto ou relativo à raiz carregada. O caminho "."
+ * representa a própria raiz. Componentes que escapem da raiz são sempre
+ * rejeitados.
  */
-unique_ptr<Item> SistemaFicheiros::extrairItemPorNome(Diretoria *dir,
-                                                       const string &nome) {
-  for (const auto &item : dir->getConteudo()) {
-    if (item->getNome() == nome)
-      return dir->extrair(item.get());
+Item *SistemaFicheiros::resolverCaminho(const string &caminho) {
+  if (!raiz || caminho.empty())
+    return nullptr;
+
+  fs::path pedido = fs::path(caminho).lexically_normal();
+  fs::path relativo;
+  if (pedido.is_absolute()) {
+    const fs::path caminhoRaiz =
+        fs::path(raiz->getCaminho()).lexically_normal();
+    relativo = pedido.lexically_relative(caminhoRaiz);
+    if (relativo.empty())
+      return nullptr;
+  } else {
+    relativo = pedido;
   }
-  return nullptr;
+
+  vector<string> componentes;
+  for (const fs::path &componente : relativo) {
+    const string valor = componente.string();
+    if (valor.empty() || valor == ".")
+      continue;
+    if (valor == "..")
+      return nullptr;
+    componentes.push_back(valor);
+  }
+
+  Item *atual = raiz.get();
+  for (const string &componente : componentes) {
+    auto *diretoriaAtual = dynamic_cast<Diretoria *>(atual);
+    if (!diretoriaAtual)
+      return nullptr;
+
+    Item *seguinte = nullptr;
+    for (const auto &item : diretoriaAtual->getConteudo()) {
+      if (item->getNome() == componente) {
+        seguinte = item.get();
+        break;
+      }
+    }
+    if (!seguinte)
+      return nullptr;
+    atual = seguinte;
+  }
+
+  return atual;
 }
 
 /**
@@ -714,40 +674,6 @@ void SistemaFicheiros::setCaminhoRec(Diretoria *dir, string &caminhoDir) {
       }
     }
   }
-}
-
-/**
- * Resumo:
- * Procura recursivamente a data de modificação de um ficheiro com o nome
- * especificado dentro da diretoria fornecida.
- *
- * Parâmetros:
- * - dir (Diretoria*): Ponteiro para a diretoria onde a busca inicia.
- * - ficheiro (const string&): O nome do ficheiro cuja data de modificação se
- * pretende encontrar.
- *
- * Retorno:
- * - string*: Ponteiro para uma string contendo a data de modificação do
- * ficheiro, ou nullptr se não encontrado.
- */
-optional<string> SistemaFicheiros::DataFicheiroRec(Diretoria *dir,
-                                                   const string &ficheiro) {
-  for (const auto &item : dir->getConteudo()) {
-    if (item->getIsFicheiro() && item->getNome() == ficheiro) {
-      Ficheiro *f = dynamic_cast<Ficheiro *>(item.get());
-      if (f) {
-        return f->getDataModificacao();
-      }
-    } else if (!item->getIsFicheiro()) {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
-      if (subdir) {
-        optional<string> res = DataFicheiroRec(subdir, ficheiro);
-        if (res)
-          return res;
-      }
-    }
-  }
-  return nullopt;
 }
 
 /**
@@ -1121,12 +1047,11 @@ string *SistemaFicheiros::DirectoriaMaisEspaco() {
 
 /**
  * Resumo:
- * Método público que realiza uma busca por nome, podendo ser por diretoria ou
- * ficheiro. Delega a busca para as funções recursivas internas
- * 'pesquisarDiretoriaRec' ou 'pesquisarFicheiroRec'.
+ * Resolve um ficheiro ou diretoria através de um caminho inequívoco, absoluto
+ * ou relativo à raiz carregada.
  *
  * Parâmetros:
- * - const string &s: Nome a ser pesquisado.
+ * - const string &s: Caminho a resolver.
  * - int Tipo: Tipo de item a ser pesquisado (1 para diretoria, 0 para
  * ficheiro).
  *
@@ -1138,17 +1063,12 @@ string *SistemaFicheiros::Search(const string &s, int Tipo) {
   if (!raiz)
     return nullptr;
 
-  optional<string> resultado;
-
-  if (Tipo == 1)
-    resultado = pesquisarDiretoriaRec(raiz.get(), s);
-  else if (Tipo == 0)
-    resultado = pesquisarFicheiroRec(raiz.get(), s);
-
-  if (resultado)
-    return new string(move(*resultado));
-
-  return nullptr;
+  Item *item = resolverCaminho(s);
+  if (!item || (Tipo != 0 && Tipo != 1))
+    return nullptr;
+  if ((Tipo == 0) != item->getIsFicheiro())
+    return nullptr;
+  return new string(item->getCaminho());
 }
 
 /**
@@ -1299,8 +1219,8 @@ bool SistemaFicheiros::Ler_XML(const string &s) {
  * adiciona à nova e atualiza o atributo 'caminho' do objeto.
  *
  * Parâmetros:
- * - Fich (const string&): Nome do ficheiro que se pretende mover.
- * - DirNova (const string&): Nome da diretoria de destino.
+ * - Fich (const string&): Caminho do ficheiro que se pretende mover.
+ * - DirNova (const string&): Caminho da diretoria de destino.
  *
  * Retorno:
  * - bool: Retorna 'true' se o movimento for bem-sucedido. Retorna 'false' e
@@ -1310,39 +1230,23 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
   if (!raiz)
     return false;
 
-  Item *item =
-      procurarItemRec(raiz.get(), Fich, false); // procurar ficheiro pretendido
-  if (!item) {
+  Item *item = resolverCaminho(Fich);
+  if (!item || !item->getIsFicheiro()) {
     Logger::log(Logger::Level::ERROR_,
                 "Erro: ficheiro '" + Fich + "' não encontrado.");
     return false;
   }
 
-  Item *dirNovaItem;
-  if (DirNova == raiz->getNome()) {
-    dirNovaItem = raiz.get();
-  } else {
-    dirNovaItem = procurarItemRec(raiz.get(), DirNova,
-                                  true); // procurar diretoria nova pelo nome
-  }
-
-  if (!dirNovaItem || dirNovaItem->getIsFicheiro()) {
+  auto *dirNova = dynamic_cast<Diretoria *>(resolverCaminho(DirNova));
+  if (!dirNova) {
     Logger::log(Logger::Level::ERROR_,
                 "Erro: diretoria '" + DirNova + "' não encontrada.");
     return false;
   }
 
-  Diretoria *dirNova = dynamic_cast<Diretoria *>(
-      dirNovaItem); // transforma em ponteiro para diretoria
-  if (!dirNova) {
-    Logger::log(Logger::Level::ERROR_,
-                "Erro: falha ao converter para diretoria.");
-    return false;
-  }
-
   // Verificação de duplicados na diretoria destino
   for (const auto &conteudo : dirNova->getConteudo()) {
-    if (conteudo->getNome() == item->getNome()) {
+    if (Utils::nomesItemEquivalentes(conteudo->getNome(), item->getNome())) {
       Logger::log(Logger::Level::ERROR_,
                   "Erro: Já existe um item com o nome '" + item->getNome() +
                       "' na diretoria destino.");
@@ -1378,7 +1282,7 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
   }
 
   // remover o item da diretoria antiga
-  auto itemMovido = extrairItemPorNome(diretoriaAntiga, item->getNome());
+  auto itemMovido = diretoriaAntiga->extrair(item);
   if (!itemMovido) {
     if (importacao_diretoria) {
       error_code rollbackError;
@@ -1410,9 +1314,8 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
  * de todos os itens movidos através de 'setCaminhoRec'.
  *
  * Parâmetros:
- * - DirOld (const string&): Nome da diretoria de origem que se pretende mover.
- * - DirNew (const string&): Nome da diretoria de destino onde a 'DirOld' será
- * colocada.
+ * - DirOld (const string&): Caminho da diretoria de origem.
+ * - DirNew (const string&): Caminho da diretoria de destino.
  *
  * Retorno:
  * - bool: Retorna 'true' se a movimentação for bem-sucedida, ou 'false' caso
@@ -1424,37 +1327,17 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
   if (!raiz)
     return false;
 
-  Item *item = procurarItemRec(raiz.get(), DirOld, true);
-  if (!item) {
+  auto *itemDir = dynamic_cast<Diretoria *>(resolverCaminho(DirOld));
+  if (!itemDir || itemDir == raiz.get()) {
     Logger::log(Logger::Level::ERROR_,
                 "Erro: diretoria '" + DirOld + "' não encontrada.");
     return false;
   }
 
-  Diretoria *itemDir = dynamic_cast<Diretoria *>(item);
-  if (!itemDir) {
-    Logger::log(Logger::Level::ERROR_, "Erro: o item não é uma diretoria.");
-    return false;
-  }
-
-  Item *dirNovaItem;
-  if (DirNew == raiz->getNome()) {
-    dirNovaItem = raiz.get();
-  } else {
-    dirNovaItem = procurarItemRec(raiz.get(), DirNew,
-                                  true); // procurar diretoria nova pelo nome
-  }
-
-  if (!dirNovaItem || dirNovaItem->getIsFicheiro()) {
-    Logger::log(Logger::Level::ERROR_,
-                "Erro: diretoria '" + DirNew + "' não encontrada.");
-    return false;
-  }
-
-  Diretoria *dirNova = dynamic_cast<Diretoria *>(dirNovaItem);
+  auto *dirNova = dynamic_cast<Diretoria *>(resolverCaminho(DirNew));
   if (!dirNova) {
     Logger::log(Logger::Level::ERROR_,
-                "Erro: falha ao converter para diretoria.");
+                "Erro: diretoria '" + DirNew + "' não encontrada.");
     return false;
   }
 
@@ -1467,7 +1350,8 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
   }
 
   for (const auto &conteudo : dirNova->getConteudo()) {
-    if (conteudo->getNome() == itemDir->getNome()) {
+    if (Utils::nomesItemEquivalentes(conteudo->getNome(),
+                                     itemDir->getNome())) {
       Logger::log(Logger::Level::ERROR_,
                   "Erro: já existe um item com o mesmo nome no destino.");
       return false;
@@ -1497,7 +1381,7 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
   }
 
   // atualizar estrutura da árvore (REMOVER + ADICIONAR apenas uma vez!)
-  auto diretoriaMovida = extrairItemPorNome(diretoriaAntiga, itemDir->getNome());
+  auto diretoriaMovida = diretoriaAntiga->extrair(itemDir);
   if (!diretoriaMovida) {
     if (importacao_diretoria) {
       error_code rollbackError;
@@ -1520,12 +1404,10 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
 
 /**
  * Resumo:
- * Método público que obtém a data de modificação de um ficheiro específico.
- * Atua como um ponto de entrada, delegando a pesquisa para a função recursiva
- * interna 'DataFicheiroRec', iniciando a busca a partir da diretoria raiz.
+ * Obtém a data de modificação de um ficheiro identificado pelo seu caminho.
  *
  * Parâmetros:
- * - ficheiro (const string&): O nome do ficheiro que se pretende consultar.
+ * - ficheiro (const string&): Caminho absoluto ou relativo à raiz.
  *
  * Retorno:
  * - string*: Ponteiro para a string contendo a data do ficheiro.
@@ -1536,10 +1418,10 @@ string *SistemaFicheiros::DataFicheiro(const string &ficheiro) {
   if (!raiz)
     return nullptr;
 
-  optional<string> resultado = DataFicheiroRec(raiz.get(), ficheiro);
-  if (!resultado)
+  auto *item = dynamic_cast<Ficheiro *>(resolverCaminho(ficheiro));
+  if (!item)
     return nullptr;
-  return new string(move(*resultado));
+  return new string(item->getDataModificacao());
 }
 
 /**

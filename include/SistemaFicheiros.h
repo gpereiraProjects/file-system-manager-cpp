@@ -65,10 +65,7 @@ private:
   void diretoriaMaisEspaco(
       Diretoria *dir, std::uintmax_t &tamMax,
       std::string &strMax); // utilizada no DirectoriaMaisEspaco
-  std::optional<std::string> pesquisarDiretoriaRec(
-      Diretoria *dir, const std::string &s); // utilizada no Search
-  std::optional<std::string> pesquisarFicheiroRec(
-      Diretoria *dir, const std::string &s); // utilizada no Search
+  Item *resolverCaminho(const std::string &caminho);
   void pesquisarItensComNomeIgualRec(
       Diretoria *dir, std::list<std::string> &lres, const std::string &n,
       bool procFich); // utilizada no RemoverAll, PesquisarAllFicheiros,
@@ -82,16 +79,11 @@ private:
   void escreverXMLRec(Diretoria *dir, XML *XML); // utilizada no Escrever_XML
   Item *procurarItemRec(
       Diretoria *dir, const std::string &nomeProcurado,
-      bool procurarDiretorias); // utilizada no MoveFicheiro e MoverDirectoria
+      bool procurarDiretorias); // utilizada no CopyBatch
   Diretoria *procurarDiretoriaPai(Diretoria *dir, const Item *item);
   bool contemDiretoria(Diretoria *origem, const Diretoria *procurada);
-  std::unique_ptr<Item> extrairItemPorNome(
-      Diretoria *dir,
-      const std::string &nome); // utilizada no MoveFicheiro e MoverDirectoria
   void setCaminhoRec(Diretoria *dir,
                      std::string &caminhoDir); // utilizada no MoverDirectoria
-  std::optional<std::string> DataFicheiroRec(
-      Diretoria *dir, const std::string &ficheiro); // utilizada no DataFicheiro
   void ShowRec(Diretoria *dir, std::size_t &nTabs,
                std::ostream &out); // utilizada no Tree
   bool VerificarDuplicadosRec(

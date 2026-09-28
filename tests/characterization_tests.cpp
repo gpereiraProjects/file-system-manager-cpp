@@ -260,7 +260,7 @@ void testSymbolicLinkCyclesAreIgnored() {
   expect(fileSystem.Memoria() == 12,
          "A symbolic-link cycle must not duplicate file sizes");
   std::unique_ptr<std::string> ignoredLink(
-      fileSystem.Search("back-to-root", 1));
+      fileSystem.Search("documents/back-to-root", 1));
   expect(ignoredLink == nullptr,
          "An ignored symbolic link must not be searchable as a directory");
 }
@@ -270,7 +270,8 @@ void testSearchAndLargestFile() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
 
-  std::unique_ptr<std::string> filePath(fileSystem.Search("largest.bin", 0));
+  std::unique_ptr<std::string> filePath(
+      fileSystem.Search("documents/largest.bin", 0));
   expect(filePath != nullptr, "The nested file should be found");
   expect(fs::path(*filePath).filename() == "largest.bin",
          "File search should return the complete matching path");
@@ -288,6 +289,90 @@ void testSearchAndLargestFile() {
   expect(largest != nullptr, "A largest file should be returned");
   expect(fs::path(*largest).filename() == "largest.bin",
          "The largest fixture file should be selected");
+}
+
+void testPathSearchSelectsExactItems() {
+  TemporaryFixture fixture;
+  {
+    std::ofstream documentsCopy(fixture.root / "documents" / "small.txt",
+                                std::ios::binary);
+    documentsCopy << "documents";
+    std::ofstream emptyCopy(fixture.root / "empty" / "small.txt",
+                            std::ios::binary);
+    emptyCopy << "empty";
+  }
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  std::unique_ptr<std::string> rootFile(fileSystem.Search("small.txt", 0));
+  std::unique_ptr<std::string> documentsFile(
+      fileSystem.Search("documents/small.txt", 0));
+  std::unique_ptr<std::string> emptyFile(
+      fileSystem.Search("empty/small.txt", 0));
+  expect(rootFile != nullptr && documentsFile != nullptr &&
+             emptyFile != nullptr,
+         "Relative paths should resolve every repeated filename exactly");
+  expect(fs::path(*rootFile).parent_path() == fixture.root,
+         "A leaf path should resolve only at the root level");
+  expect(fs::path(*documentsFile).parent_path().filename() == "documents" &&
+             fs::path(*emptyFile).parent_path().filename() == "empty",
+         "Nested paths should select the requested parent directory");
+
+  std::unique_ptr<std::string> absoluteFile(fileSystem.Search(
+      (fixture.root / "documents" / "small.txt").string(), 0));
+  expect(absoluteFile != nullptr && *absoluteFile == *documentsFile,
+         "An absolute path inside the loaded root should also resolve");
+  expect(fileSystem.Search("largest.bin", 0) == nullptr,
+         "A bare name must not silently select a nested item");
+  expect(fileSystem.Search("../small.txt", 0) == nullptr,
+         "A path must not escape the loaded root");
+  expect(fileSystem.Search("documents/small.txt", 1) == nullptr,
+         "Path search must enforce the requested item type");
+
+  std::unique_ptr<std::string> modificationDate(
+      fileSystem.DataFicheiro("documents/small.txt"));
+  expect(modificationDate != nullptr,
+         "File metadata lookup should use the same exact path resolution");
+  expect(fileSystem.DataFicheiro("largest.bin") == nullptr,
+         "File metadata lookup must not fall back to recursive name search");
+}
+
+void testPathMovesSelectExactItems() {
+  TemporaryFixture fixture;
+  fs::create_directories(fixture.root / "documents" / "target");
+  fs::create_directories(fixture.root / "empty" / "target");
+  fs::create_directories(fixture.root / "documents" / "nested");
+  fs::create_directories(fixture.root / "empty" / "nested");
+  {
+    std::ofstream documentsFile(fixture.root / "documents" / "same.txt",
+                                std::ios::binary);
+    documentsFile << "documents";
+    std::ofstream emptyFile(fixture.root / "empty" / "same.txt",
+                            std::ios::binary);
+    emptyFile << "empty";
+  }
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  expect(!fileSystem.MoveFicheiro("same.txt", "empty/target"),
+         "A bare nested filename must not move an arbitrary match");
+  expect(fileSystem.MoveFicheiro("documents/same.txt", "empty/target"),
+         "A complete relative path should move the selected file");
+  expect(!fs::exists(fixture.root / "documents" / "same.txt") &&
+             fs::exists(fixture.root / "empty" / "same.txt") &&
+             fs::exists(fixture.root / "empty" / "target" / "same.txt"),
+         "Only the file identified by its path should move");
+
+  expect(!fileSystem.MoverDirectoria("nested", "."),
+         "A bare nested directory name must not move an arbitrary match");
+  expect(fileSystem.MoverDirectoria("documents/nested", "."),
+         "A complete relative path should move the selected directory");
+  expect(fs::exists(fixture.root / "nested") &&
+             fs::exists(fixture.root / "empty" / "nested") &&
+             !fs::exists(fixture.root / "documents" / "nested"),
+         "Only the directory identified by its path should move");
 }
 
 void testTreeOutput() {
@@ -359,7 +444,7 @@ void testXmlEscapesSpecialCharacters() {
   expect(restored.Memoria() == original.Memoria(),
          "XML round-trip should preserve file sizes");
   std::unique_ptr<std::string> specialFile(
-      restored.Search("notes & ideas.txt", 0));
+      restored.Search("R&D's/notes & ideas.txt", 0));
   expect(specialFile != nullptr,
          "Escaped file names should be decoded during import");
 
@@ -461,7 +546,8 @@ void testOwnershipTransfersRemainValid() {
   expect(fileSystem.ContarFicheiros() == 2,
          "Moving a file should preserve the file count");
 
-  std::unique_ptr<std::string> movedFile(fileSystem.Search("small.txt", 0));
+  std::unique_ptr<std::string> movedFile(
+      fileSystem.Search("documents/small.txt", 0));
   expect(movedFile != nullptr, "The moved file should remain searchable");
   expect(fs::path(*movedFile).parent_path().filename() == "documents",
          "The moved file path should reference its new parent");
@@ -474,7 +560,7 @@ void testOwnershipTransfersRemainValid() {
          "Moving a directory should preserve all contained files");
 
   std::unique_ptr<std::string> movedDirectory(
-      fileSystem.Search("documents", 1));
+      fileSystem.Search("empty/documents", 1));
   expect(movedDirectory != nullptr,
          "The moved directory should remain searchable");
   expect(fs::path(*movedDirectory).parent_path().filename() == "empty",
@@ -517,7 +603,7 @@ void testCyclicDirectoryMoveIsRejected() {
 
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
-  expect(!fileSystem.MoverDirectoria("documents", "nested"),
+  expect(!fileSystem.MoverDirectoria("documents", "documents/nested"),
          "A directory must not be moved into its own subtree");
   expect(fileSystem.ContarDirectorias() == 4,
          "A rejected cyclic move should preserve the tree");
@@ -756,6 +842,8 @@ int main() {
       {"invalid directory", testInvalidDirectoryIsRejected},
       {"symbolic-link cycle", testSymbolicLinkCyclesAreIgnored},
       {"search and largest file", testSearchAndLargestFile},
+      {"exact path search", testPathSearchSelectsExactItems},
+      {"exact path moves", testPathMovesSelectExactItems},
       {"tree output", testTreeOutput},
       {"XML round-trip", testXmlRoundTrip},
       {"XML special-character escaping", testXmlEscapesSpecialCharacters},
