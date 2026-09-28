@@ -2,6 +2,7 @@
 #include "Ficheiro.h"
 #include "Item.h"
 #include "Logger.h"
+#include "Menu.h"
 #include "SistemaFicheiros.h"
 #include "Utils.h"
 
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -25,6 +27,34 @@ static_assert(std::is_base_of_v<Item, Diretoria>);
 namespace {
 
 namespace fs = std::filesystem;
+
+class ScopedConsoleInput {
+public:
+  explicit ScopedConsoleInput(const std::string &contents) : input(contents) {
+    previousInput = std::cin.rdbuf(input.rdbuf());
+    previousOutput = std::cout.rdbuf(output.rdbuf());
+    std::cin.clear();
+    std::cout.clear();
+  }
+
+  ~ScopedConsoleInput() {
+    std::cin.rdbuf(previousInput);
+    std::cout.rdbuf(previousOutput);
+    std::cin.clear();
+    std::cout.clear();
+  }
+
+  ScopedConsoleInput(const ScopedConsoleInput &) = delete;
+  ScopedConsoleInput &operator=(const ScopedConsoleInput &) = delete;
+
+  std::string capturedOutput() const { return output.str(); }
+
+private:
+  std::istringstream input;
+  std::ostringstream output;
+  std::streambuf *previousInput = nullptr;
+  std::streambuf *previousOutput = nullptr;
+};
 
 class TemporaryFixture {
 public:
@@ -107,6 +137,53 @@ void testPortablePathNormalization() {
              "directory\\file.txt",
          "A backslash must remain a valid filename character on POSIX");
 #endif
+}
+
+void testMenuInputAndEndOfFileHandling() {
+  SistemaFicheiros fileSystem;
+
+  {
+    ScopedConsoleInput console("");
+    expect(!Menu::MenuInicializacao(fileSystem),
+           "Initialization should stop cleanly at end of input");
+  }
+
+  {
+    ScopedConsoleInput console("1\n");
+    expect(!Menu::MenuInicializacao(fileSystem),
+           "EOF while reading an initial path should stop cleanly");
+  }
+
+  {
+    ScopedConsoleInput console("1\nnot-a-number\n\n");
+    expect(!Menu::ExecutarOpcao(fileSystem),
+           "EOF inside a submenu should propagate to the main menu");
+    expect(console.capturedOutput().find("Entrada inválida") !=
+               std::string::npos,
+           "Invalid numeric input should produce a clear error");
+  }
+
+  {
+    ScopedConsoleInput console("2\n1\nitem.txt\n");
+    expect(!Menu::ExecutarOpcao(fileSystem),
+           "EOF while reading an item type should stop the menu");
+  }
+
+  {
+    ScopedConsoleInput console("7 trailing-text\n\n7\n");
+    expect(!Menu::ExecutarOpcao(fileSystem),
+           "The explicit exit option should still stop the menu");
+    expect(console.capturedOutput().find("Entrada inválida") !=
+               std::string::npos,
+           "A number followed by extra text must be rejected");
+  }
+
+  for (const char *menuOption : {"1\n", "2\n", "3\n", "4\n", "5\n",
+                                 "6\n"}) {
+    ScopedConsoleInput console(menuOption);
+    expect(!Menu::ExecutarOpcao(fileSystem),
+           "Every submenu should propagate end of input");
+  }
 }
 
 void testInvalidDirectoryIsRejected() {
@@ -478,6 +555,7 @@ int main() {
   const std::vector<std::pair<std::string, std::function<void()>>> tests = {
       {"load and statistics", testLoadAndStatistics},
       {"portable path normalization", testPortablePathNormalization},
+      {"menu input and EOF", testMenuInputAndEndOfFileHandling},
       {"invalid directory", testInvalidDirectoryIsRejected},
       {"search and largest file", testSearchAndLargestFile},
       {"tree output", testTreeOutput},

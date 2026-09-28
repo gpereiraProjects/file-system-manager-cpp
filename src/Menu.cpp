@@ -6,8 +6,26 @@ using namespace std;
 
 /// ===================== SUBMENUS ==========================
 
-void Menu::MenuEstatisticas(SistemaFicheiros &SF) {
-  int op;
+Menu::InputStatus Menu::LerInteiro(int &valor) {
+  string linha;
+  if (!getline(cin, linha))
+    return InputStatus::EndOfInput;
+
+  istringstream input(linha);
+  input >> ws;
+  if (!(input >> valor))
+    return InputStatus::Invalid;
+
+  input >> ws;
+  return input.eof() ? InputStatus::Success : InputStatus::Invalid;
+}
+
+bool Menu::LerTexto(string &valor) {
+  return static_cast<bool>(getline(cin, valor));
+}
+
+bool Menu::MenuEstatisticas(SistemaFicheiros &SF) {
+  int op = 0;
   do {
     Utils::limparEcra();
     cout << "\n===== ESTATÍSTICAS =====\n";
@@ -17,18 +35,14 @@ void Menu::MenuEstatisticas(SistemaFicheiros &SF) {
     cout << "4. Voltar\n";
     cout << "Escolha: ";
 
-    // 1. Valida se a entrada é um número. Se for letra, limpa o erro e o buffer
-    // para evitar loop infinito.
-    if (!(cin >> op)) {
-      cin.clear();
-      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    const InputStatus status = LerInteiro(op);
+    if (status == InputStatus::EndOfInput)
+      return false;
+    if (status == InputStatus::Invalid) {
       cout << "Entrada inválida! Insira um número.\n";
       Utils::esperarEnter();
       continue;
     }
-    // 2. Remove o 'Enter' (\n) residual do buffer para não saltar os próximos
-    // getlines ou esperarEnter
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
     switch (op) {
     case 1: { // Estatísticas de ficheiros
@@ -72,10 +86,11 @@ void Menu::MenuEstatisticas(SistemaFicheiros &SF) {
       break;
     }
   } while (op != 4);
+  return true;
 }
 
-void Menu::MenuPesquisas(SistemaFicheiros &SF) {
-  int op;
+bool Menu::MenuPesquisas(SistemaFicheiros &SF) {
+  int op = 0;
   string nome;
   list<string> lista;
   do {
@@ -87,28 +102,30 @@ void Menu::MenuPesquisas(SistemaFicheiros &SF) {
     cout << "4. Voltar\n";
     cout << "Escolha: ";
 
-    if (!(cin >> op)) {
-      cin.clear();
-      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    const InputStatus status = LerInteiro(op);
+    if (status == InputStatus::EndOfInput)
+      return false;
+    if (status == InputStatus::Invalid) {
       cout << "Entrada inválida! Insira um número.\n";
       Utils::esperarEnter();
       continue;
     }
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
     switch (op) {
     case 1: {
       Utils::limparEcra();
       cout << "===== PESQUISAR FICHEIRO/DIRETORIA =====\n";
-      // Nota: Removeu-se o cin.ignore() daqui, pois o global já tratou disso.
       cout << "Nome a pesquisar: ";
-      getline(cin, nome);
+      if (!LerTexto(nome))
+        return false;
 
       cout << "Tipo (0 = ficheiro, 1 = diretoria): ";
-      int tipoOp; // Usar variável diferente para não confundir com o op do menu
-      if (cin >> tipoOp) {
-        cin.ignore(numeric_limits<streamsize>::max(),
-                   '\n'); // Limpar após ler int
+      int tipoOp = 0;
+      const InputStatus tipoStatus = LerInteiro(tipoOp);
+      if (tipoStatus == InputStatus::EndOfInput)
+        return false;
+      if (tipoStatus == InputStatus::Success &&
+          (tipoOp == 0 || tipoOp == 1)) {
         unique_ptr<string> r(SF.Search(nome, tipoOp));
         if (r) {
           cout << "Encontrado: " << *r << endl;
@@ -116,8 +133,6 @@ void Menu::MenuPesquisas(SistemaFicheiros &SF) {
           cout << "Não encontrado.\n";
         }
       } else {
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
         cout << "Tipo inválido.\n";
       }
 
@@ -128,7 +143,8 @@ void Menu::MenuPesquisas(SistemaFicheiros &SF) {
       Utils::limparEcra();
       cout << "===== PESQUISAR TODAS AS DIRECTORIAS =====\n";
       cout << "Nome da diretoria: ";
-      getline(cin, nome);
+      if (!LerTexto(nome))
+        return false;
       SF.PesquisarAllDirectorias(lista, nome);
       Utils::PrintListaString(lista);
       if (lista.empty()) {
@@ -141,7 +157,8 @@ void Menu::MenuPesquisas(SistemaFicheiros &SF) {
       Utils::limparEcra();
       cout << "===== PESQUISAR TODOS OS FICHEIROS =====\n";
       cout << "Nome do ficheiro: ";
-      getline(cin, nome);
+      if (!LerTexto(nome))
+        return false;
       SF.PesquisarAllFicheiros(lista, nome);
       Utils::PrintListaString(lista);
       if (lista.empty()) {
@@ -159,10 +176,11 @@ void Menu::MenuPesquisas(SistemaFicheiros &SF) {
       break;
     }
   } while (op != 4);
+  return true;
 }
 
-void Menu::MenuMovimentos(SistemaFicheiros &SF) {
-  int op;
+bool Menu::MenuMovimentos(SistemaFicheiros &SF) {
+  int op = 0;
   string nome, dest;
 
   do {
@@ -173,21 +191,23 @@ void Menu::MenuMovimentos(SistemaFicheiros &SF) {
     cout << "3. Voltar\n";
     cout << "Escolha: ";
 
-    if (!(cin >> op)) {
-      cin.clear();
-      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    const InputStatus status = LerInteiro(op);
+    if (status == InputStatus::EndOfInput)
+      return false;
+    if (status == InputStatus::Invalid) {
       cout << "Entrada inválida! Insira um número.\n";
       Utils::esperarEnter();
       continue;
     }
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
     switch (op) {
     case 1:
       cout << "Ficheiro: ";
-      getline(cin, nome);
+      if (!LerTexto(nome))
+        return false;
       cout << "Diretoria destino: ";
-      getline(cin, dest);
+      if (!LerTexto(dest))
+        return false;
       if (SF.MoveFicheiro(nome, dest)) {
         cout << "Ficheiro movido com sucesso.\n";
       } else {
@@ -198,9 +218,11 @@ void Menu::MenuMovimentos(SistemaFicheiros &SF) {
 
     case 2:
       cout << "Nome da diretoria: ";
-      getline(cin, nome);
+      if (!LerTexto(nome))
+        return false;
       cout << "Diretoria nova: ";
-      getline(cin, dest);
+      if (!LerTexto(dest))
+        return false;
       if (SF.MoverDirectoria(nome, dest)) {
         cout << "Diretoria movida com sucesso.\n";
       } else {
@@ -218,10 +240,11 @@ void Menu::MenuMovimentos(SistemaFicheiros &SF) {
       break;
     }
   } while (op != 3);
+  return true;
 }
 
-void Menu::MenuXML(SistemaFicheiros &SF) {
-  int op;
+bool Menu::MenuXML(SistemaFicheiros &SF) {
+  int op = 0;
   string xml;
   do {
     Utils::limparEcra();
@@ -231,20 +254,20 @@ void Menu::MenuXML(SistemaFicheiros &SF) {
     cout << "3. Voltar\n";
     cout << "Escolha: ";
 
-    if (!(cin >> op)) {
-      cin.clear();
-      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    const InputStatus status = LerInteiro(op);
+    if (status == InputStatus::EndOfInput)
+      return false;
+    if (status == InputStatus::Invalid) {
       cout << "Entrada inválida! Insira um número.\n";
       Utils::esperarEnter();
       continue;
     }
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
     switch (op) {
     case 1:
       cout << "Nome do ficheiro XML: ";
-      // Mudei para getline para ser consistente e permitir espaços
-      getline(cin, xml);
+      if (!LerTexto(xml))
+        return false;
       if (SF.Escrever_XML(xml))
         cout << "Ficheiro XML exportado com sucesso.\n";
       else
@@ -254,7 +277,8 @@ void Menu::MenuXML(SistemaFicheiros &SF) {
 
     case 2:
       cout << "Nome do ficheiro XML: ";
-      getline(cin, xml);
+      if (!LerTexto(xml))
+        return false;
       if (SF.Ler_XML(xml)) {
         cout << "Ficheiro XML carregado com sucesso.\n";
       } else {
@@ -273,10 +297,11 @@ void Menu::MenuXML(SistemaFicheiros &SF) {
     }
 
   } while (op != 3);
+  return true;
 }
 
-void Menu::MenuAvancado(SistemaFicheiros &SF) {
-  int op;
+bool Menu::MenuAvancado(SistemaFicheiros &SF) {
+  int op = 0;
   string nome, padrao, dir1, dir2;
   do {
     Utils::limparEcra();
@@ -290,14 +315,14 @@ void Menu::MenuAvancado(SistemaFicheiros &SF) {
     cout << "7. Voltar\n";
     cout << "Escolha: ";
 
-    if (!(cin >> op)) {
-      cin.clear();
-      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    const InputStatus status = LerInteiro(op);
+    if (status == InputStatus::EndOfInput)
+      return false;
+    if (status == InputStatus::Invalid) {
       cout << "Entrada inválida! Insira um número.\n";
       Utils::esperarEnter();
       continue;
     }
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
     switch (op) {
     case 1: // Verifica se existem ficheiros duplicados
@@ -307,13 +332,15 @@ void Menu::MenuAvancado(SistemaFicheiros &SF) {
       break;
 
     case 2: // Copiar batch de ficheiros
-      // cin.ignore() removido
       cout << "Padrão: ";
-      getline(cin, padrao);
+      if (!LerTexto(padrao))
+        return false;
       cout << "Diretoria origem: ";
-      getline(cin, dir1);
+      if (!LerTexto(dir1))
+        return false;
       cout << "Diretoria destino: ";
-      getline(cin, dir2);
+      if (!LerTexto(dir2))
+        return false;
       if (SF.CopyBatch(padrao, dir1, dir2)) {
         cout << "Cópia concluída com sucesso.\n";
       } else {
@@ -324,7 +351,8 @@ void Menu::MenuAvancado(SistemaFicheiros &SF) {
 
     case 3: // Mostrar data de ficheiro
       cout << "Nome do ficheiro: ";
-      getline(cin, nome);
+      if (!LerTexto(nome))
+        return false;
       if (unique_ptr<string> d =
               unique_ptr<string>(SF.DataFicheiro(nome))) {
         cout << "Data: " << *d << endl;
@@ -345,7 +373,8 @@ void Menu::MenuAvancado(SistemaFicheiros &SF) {
       cout << "===== CARREGAR NOVA DIRETORIA =====\n";
       cout << "Caminho da nova diretoria: ";
       string path;
-      getline(cin, path);
+      if (!LerTexto(path))
+        return false;
       if (SF.Load(path)) {
         cout << "Diretoria carregada com sucesso.\n";
       } else {
@@ -356,19 +385,20 @@ void Menu::MenuAvancado(SistemaFicheiros &SF) {
 
     case 6: { // Remover tudo
       cout << "Nome: ";
-      getline(cin, nome);
+      if (!LerTexto(nome))
+        return false;
 
-      int opTipo;
+      int opTipo = 0;
       cout << "Tipo (0: DIR / 1: FICH): ";
-      // Pequena proteção extra para leitura interna
-      if (cin >> opTipo) {
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+      const InputStatus tipoStatus = LerInteiro(opTipo);
+      if (tipoStatus == InputStatus::EndOfInput)
+        return false;
+      if (tipoStatus == InputStatus::Success &&
+          (opTipo == 0 || opTipo == 1)) {
         string tipo = (opTipo == 0) ? "DIR" : "FICH";
         cout << (SF.RemoverAll(nome, tipo) ? "Remoção concluída.\n"
                                            : "Erro na remoção.\n");
       } else {
-        cin.clear();
-        cin.ignore(numeric_limits<streamsize>::max(), '\n');
         cout << "Tipo inválido.\n";
       }
 
@@ -386,11 +416,12 @@ void Menu::MenuAvancado(SistemaFicheiros &SF) {
     }
 
   } while (op != 7);
+  return true;
 }
 
 bool Menu::MenuInicializacao(SistemaFicheiros &SF) {
   string path;
-  int op;
+  int op = 0;
 
   while (true) {
     Utils::limparEcra();
@@ -400,19 +431,20 @@ bool Menu::MenuInicializacao(SistemaFicheiros &SF) {
     cout << "3. Encerrar programa\n";
     cout << "Opção: ";
 
-    if (!(cin >> op)) {
-      cin.clear();
-      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    const InputStatus status = LerInteiro(op);
+    if (status == InputStatus::EndOfInput)
+      return false;
+    if (status == InputStatus::Invalid) {
       cout << "Entrada inválida! Insira um número.\n";
       Utils::esperarEnter();
       continue;
     }
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
     switch (op) {
     case 1: {
       cout << "Caminho: ";
-      getline(cin, path);
+      if (!LerTexto(path))
+        return false;
 
       bool ok = SF.Load(path);
       if (ok) {
@@ -428,7 +460,8 @@ bool Menu::MenuInicializacao(SistemaFicheiros &SF) {
 
     case 2: {
       cout << "Nome do ficheiro XML: ";
-      getline(cin, path);
+      if (!LerTexto(path))
+        return false;
 
       if (SF.Ler_XML(path)) {
         cout << "Ficheiro XML carregado com sucesso.\n";
@@ -469,49 +502,55 @@ bool Menu::ExecutarOpcao(SistemaFicheiros &SF) {
   while (true) {
     Utils::limparEcra();
     MostrarMenu();
-    int op;
+    int op = 0;
 
-    if (!(cin >> op)) {
-      cin.clear();
-      cin.ignore(numeric_limits<streamsize>::max(), '\n');
+    const InputStatus status = LerInteiro(op);
+    if (status == InputStatus::EndOfInput)
+      return false;
+    if (status == InputStatus::Invalid) {
       cout << "Entrada inválida! Insira um número.\n";
       Utils::esperarEnter();
       continue;
     }
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
     switch (op) {
     case 1:
-      MenuEstatisticas(SF);
+      if (!MenuEstatisticas(SF))
+        return false;
       break;
 
     case 2:
-      MenuPesquisas(SF);
+      if (!MenuPesquisas(SF))
+        return false;
       break;
 
     case 3: {
       string n1, n2;
-      // cin.ignore() removido
       Utils::limparEcra();
       cout << "===== RENOMEAR FICHEIROS =====\n";
       cout << "Nome atual: ";
-      getline(cin, n1);
+      if (!LerTexto(n1))
+        return false;
       cout << "Novo nome: ";
-      getline(cin, n2);
+      if (!LerTexto(n2))
+        return false;
       SF.RenomearFicheiros(n1, n2);
       Utils::esperarEnter();
       break;
     }
     case 4:
-      MenuMovimentos(SF);
+      if (!MenuMovimentos(SF))
+        return false;
       break;
 
     case 5:
-      MenuXML(SF);
+      if (!MenuXML(SF))
+        return false;
       break;
 
     case 6:
-      MenuAvancado(SF);
+      if (!MenuAvancado(SF))
+        return false;
       break;
 
     case 7:

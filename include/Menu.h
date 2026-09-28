@@ -10,12 +10,17 @@ public:
     static bool MenuInicializacao(SistemaFicheiros &SF);
 
 private:
+    enum class InputStatus { Success, Invalid, EndOfInput };
+
+    static InputStatus LerInteiro(int &valor);
+    static bool LerTexto(std::string &valor);
+
     // Submenus organizados
-    static void MenuEstatisticas(SistemaFicheiros &SF);
-    static void MenuPesquisas(SistemaFicheiros &SF);
-    static void MenuMovimentos(SistemaFicheiros &SF);
-    static void MenuXML(SistemaFicheiros &SF);
-    static void MenuAvancado(SistemaFicheiros &SF);
+    static bool MenuEstatisticas(SistemaFicheiros &SF);
+    static bool MenuPesquisas(SistemaFicheiros &SF);
+    static bool MenuMovimentos(SistemaFicheiros &SF);
+    static bool MenuXML(SistemaFicheiros &SF);
+    static bool MenuAvancado(SistemaFicheiros &SF);
 };
 
 #endif // MENU_H

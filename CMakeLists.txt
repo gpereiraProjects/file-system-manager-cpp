@@ -81,6 +81,7 @@ include(CTest)
 if(BUILD_TESTING)
     add_executable(
         file_system_manager_characterization_tests
+        src/Menu.cpp
         tests/characterization_tests.cpp
     )
     target_link_libraries(

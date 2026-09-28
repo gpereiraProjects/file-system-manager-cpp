@@ -176,7 +176,9 @@ void Utils::limparEcra() {
 }
 
 void Utils::esperarEnter() {
+  if (!cin.good())
+    return;
   cout << "Pressione Enter para continuar...";
-  cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-  cin.get();
+  string linha;
+  getline(cin, linha);
 }

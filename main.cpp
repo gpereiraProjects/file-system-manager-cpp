@@ -10,7 +10,7 @@ int main()
 {
     Logger::init("app.log");
     Logger::log(Logger::Level::INFO, "Programa iniciado.");
-    Utils::UTF8();                                // configura a consola para UTF-8 (Windows)
+    Utils::UTF8();                                // configura a consola quando necessário
     SistemaFicheiros SF;                          // cria o objecto do sistema de ficheiros
 
     if(!Menu::MenuInicializacao(SF)){
