@@ -1213,18 +1213,67 @@ bool SistemaFicheiros::RemoverAll(const string &s, const string &tipo) {
  * - s (const string&): O nome do ficheiro XML onde os dados serão exportados.
  *
  * Retorno:
- * - void (Não retorna valor).
+ * - bool: Verdadeiro quando o documento completo é publicado com sucesso.
+ * Em caso de falha, preserva o ficheiro anterior sempre que este exista.
  */
-void SistemaFicheiros::Escrever_XML(const string &s) {
+bool SistemaFicheiros::Escrever_XML(const string &s) {
   if (!raiz) {
     Logger::log(Logger::Level::ERROR_,
                 "Não é possível exportar um sistema não carregado.");
-    return;
+    return false;
   }
-  XML XML;
-  XML.WriteStartDocument(s);
-  escreverXMLRec(raiz.get(), &XML);
-  XML.WriteEndDocument();
+
+  const fs::path destination(s);
+  const string uniqueSuffix = to_string(
+      chrono::high_resolution_clock::now().time_since_epoch().count());
+  fs::path temporary = destination;
+  temporary += ".tmp-" + uniqueSuffix;
+  fs::path backup = destination;
+  backup += ".bak-" + uniqueSuffix;
+  bool originalMoved = false;
+
+  try {
+    if (fs::exists(destination) && fs::is_directory(destination))
+      throw runtime_error("O destino indicado é uma diretoria.");
+
+    XML xmlWriter;
+    xmlWriter.WriteStartDocument(temporary.string());
+    escreverXMLRec(raiz.get(), &xmlWriter);
+    xmlWriter.WriteEndDocument();
+
+    if (fs::exists(destination)) {
+      fs::rename(destination, backup);
+      originalMoved = true;
+    }
+    fs::rename(temporary, destination);
+    if (originalMoved) {
+      error_code backupError;
+      fs::remove(backup, backupError);
+      if (backupError) {
+        Logger::log(Logger::Level::WARNING,
+                    "O XML foi exportado, mas não foi possível remover a "
+                    "cópia de segurança: " + backupError.message());
+      }
+    }
+    return true;
+  } catch (const exception &e) {
+    error_code cleanupError;
+    fs::remove(temporary, cleanupError);
+
+    if (originalMoved && !fs::exists(destination)) {
+      error_code rollbackError;
+      fs::rename(backup, destination, rollbackError);
+      if (rollbackError) {
+        Logger::log(Logger::Level::ERROR_,
+                    "Falha ao restaurar o XML anterior: " +
+                        rollbackError.message());
+      }
+    }
+
+    Logger::log(Logger::Level::ERROR_,
+                "Erro ao exportar XML '" + s + "': " + e.what());
+    return false;
+  }
 }
 
 /**
@@ -1250,41 +1299,17 @@ bool SistemaFicheiros::Ler_XML(const string &s) {
     return false;
   }
 
-  string linha;
-  regex regexDiretoriaAberta(
-      "<diretoria\\s+nome=\"([^\"]+)\"\\s+tamanho=\"([^\"]+)\">");
-  smatch match;
-
   try {
-    while (getline(ficheiro, linha)) {
-      if (!linha.empty() && linha.back() == '\r')
-        linha.pop_back();
-
-      if (regex_search(linha, match, regexDiretoriaAberta)) {
-        const string nome = match[1];
-        auto novaRaiz = make_unique<Diretoria>(nome, "./" + nome);
-
-        if (!xmlParser.ReadDirectory(ficheiro, novaRaiz.get())) {
-          Logger::log(Logger::Level::ERROR_,
-                      "XML inválido ou incompleto: " + s);
-          return false;
-        }
-
-        novaRaiz->recalcularTamanho();
-        raiz = move(novaRaiz);
-        importacao_diretoria = false;
-        return true;
-      }
-    }
+    auto novaRaiz = xmlParser.ReadDocument(ficheiro);
+    raiz = move(novaRaiz);
+    importacao_diretoria = false;
+    return true;
   } catch (const exception &e) {
     Logger::log(Logger::Level::ERROR_,
                 "Erro ao interpretar XML '" + s + "': " + e.what());
     return false;
   }
 
-  Logger::log(Logger::Level::ERROR_,
-              "XML inválido: Nenhuma diretoria raiz encontrada em " + s);
-  return false;
 }
 
 /**

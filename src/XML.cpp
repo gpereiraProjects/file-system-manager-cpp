@@ -1,209 +1,427 @@
 #include "XML.h"
+
 #include "Diretoria.h"
 #include "Ficheiro.h"
 #include "Logger.h"
+#include "Utils.h"
+
+#include <charconv>
+#include <cctype>
+#include <iterator>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace std;
+namespace fs = std::filesystem;
 
-//==================== Construtor e Destrutor ====================
-XML::XML() {
-  // ctor
+namespace {
+
+string escapeXmlAttribute(const string &value) {
+  string escaped;
+  escaped.reserve(value.size());
+
+  for (const char character : value) {
+    switch (character) {
+    case '&':
+      escaped += "&amp;";
+      break;
+    case '<':
+      escaped += "&lt;";
+      break;
+    case '>':
+      escaped += "&gt;";
+      break;
+    case '"':
+      escaped += "&quot;";
+      break;
+    case '\'':
+      escaped += "&apos;";
+      break;
+    default:
+      escaped += character;
+      break;
+    }
+  }
+
+  return escaped;
 }
 
-XML::~XML() { WriteEndDocument(); }
+void appendUtf8(string &output, uint32_t codePoint) {
+  if (codePoint == 0 || codePoint > 0x10FFFFU ||
+      (codePoint >= 0xD800U && codePoint <= 0xDFFFU)) {
+    throw runtime_error("Referência de carácter XML inválida.");
+  }
 
-//===========================================WRITE===========================================
-/**
- * Resumo:
- * Inicializa o processo de exportação XML. Abre o ficheiro de saída no disco
- * com o nome/caminho especificado e escreve o cabeçalho padrão de declaração
- * XML
- * (<?xml ... ?>), preparando o ficheiro para receber a estrutura de dados.
- *
- * Parâmetros:
- * - ficheiro (string): O caminho ou nome do ficheiro onde o conteúdo XML será
- * gravado.
- *
- * Retorno:
- * - void (Não retorna valor).
- */
-void XML::WriteStartDocument(string ficheiro) {
-  FicheiroExp.open(ficheiro);
-  FicheiroExp << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+  if (codePoint <= 0x7FU) {
+    output += static_cast<char>(codePoint);
+  } else if (codePoint <= 0x7FFU) {
+    output += static_cast<char>(0xC0U | (codePoint >> 6U));
+    output += static_cast<char>(0x80U | (codePoint & 0x3FU));
+  } else if (codePoint <= 0xFFFFU) {
+    output += static_cast<char>(0xE0U | (codePoint >> 12U));
+    output += static_cast<char>(0x80U | ((codePoint >> 6U) & 0x3FU));
+    output += static_cast<char>(0x80U | (codePoint & 0x3FU));
+  } else {
+    output += static_cast<char>(0xF0U | (codePoint >> 18U));
+    output += static_cast<char>(0x80U | ((codePoint >> 12U) & 0x3FU));
+    output += static_cast<char>(0x80U | ((codePoint >> 6U) & 0x3FU));
+    output += static_cast<char>(0x80U | (codePoint & 0x3FU));
+  }
 }
 
-void XML::WriteEndDocument() { FicheiroExp.close(); }
+string decodeXmlAttribute(const string &value) {
+  string decoded;
+  decoded.reserve(value.size());
 
-/**
- * Resumo:
- * Escreve um elemento XML completo (`<ficheiro>`) no ficheiro de exportação.
- * A função calcula a indentação correta com base na profundidade atual (gerida
- * externamente pela estrutura 'PTAG') e insere os metadados do ficheiro (nome,
- * tamanho, extensão e data) como atributos da tag XML.
- *
- * Parâmetros:
- * - nome (string): O nome do ficheiro a ser registado.
- * - tamanho (uintmax_t): O tamanho do ficheiro em bytes.
- * - extensao (string): A extensão do ficheiro (sem o ponto).
- * - dataModificacao (string): A data formatada da última alteração.
- *
- * Retorno:
- * - void (Não retorna valor).
- */
-void XML::WriteFile(string nome, uintmax_t tamanho, string extensao,
-                    string dataModificacao) {
-  string tab = Utils::Tabulacao(PTAG.size());
-  FicheiroExp << tab << "<ficheiro nome=\"" << nome << "\" tamanho=\""
-              << tamanho << "\" extensao=\"" << extensao
-              << "\" dataModificacao=\"" << dataModificacao << "\"></ficheiro>"
-              << endl;
+  for (size_t index = 0; index < value.size();) {
+    if (value[index] != '&') {
+      decoded += value[index++];
+      continue;
+    }
+
+    const size_t end = value.find(';', index + 1);
+    if (end == string::npos)
+      throw runtime_error("Entidade XML sem terminador.");
+
+    const string entity = value.substr(index + 1, end - index - 1);
+    if (entity == "amp")
+      decoded += '&';
+    else if (entity == "lt")
+      decoded += '<';
+    else if (entity == "gt")
+      decoded += '>';
+    else if (entity == "quot")
+      decoded += '"';
+    else if (entity == "apos")
+      decoded += '\'';
+    else if (!entity.empty() && entity.front() == '#') {
+      const bool hexadecimal = entity.size() > 1 &&
+                               (entity[1] == 'x' || entity[1] == 'X');
+      const size_t digitsStart = hexadecimal ? 2U : 1U;
+      if (digitsStart == entity.size())
+        throw runtime_error("Referência numérica XML vazia.");
+
+      uint32_t codePoint = 0;
+      const char *first = entity.data() + digitsStart;
+      const char *last = entity.data() + entity.size();
+      const auto result =
+          from_chars(first, last, codePoint, hexadecimal ? 16 : 10);
+      if (result.ec != errc{} || result.ptr != last)
+        throw runtime_error("Referência numérica XML inválida.");
+      appendUtf8(decoded, codePoint);
+    } else {
+      throw runtime_error("Entidade XML desconhecida: &" + entity + ";");
+    }
+
+    index = end + 1;
+  }
+
+  return decoded;
 }
 
-/**
- * Resumo:
- * Escreve a tag de abertura de uma diretoria (`<diretoria ...>`) no ficheiro
- * XML. Calcula a indentação necessária baseada na profundidade atual e insere
- * os atributos de nome e tamanho. Adicionalmente, empilha um marcador na
- * estrutura de controlo 'PTAG', sinalizando que o sistema entrou num novo nível
- * de profundidade (para gerir futuras indentações e fechos de tags).
- *
- * Parâmetros:
- * - nome (string): O nome da diretoria a ser registada.
- * - tamanho (uintmax_t): O tamanho total ocupado pela diretoria (em bytes).
- *
- * Retorno:
- * - void (Não retorna valor).
- */
-void XML::WriteStartDirectory(string nome, uintmax_t tamanho) {
-  string tab = Utils::Tabulacao(PTAG.size());
-  FicheiroExp << tab << "<diretoria nome=\"" << nome << "\" tamanho=\""
-              << tamanho << "\">" << endl;
-  PTAG.push_front("diretoria");
+uintmax_t parseSize(const string &value) {
+  uintmax_t parsed = 0;
+  const char *first = value.data();
+  const char *last = first + value.size();
+  const auto result = from_chars(first, last, parsed);
+  if (value.empty() || result.ec != errc{} || result.ptr != last)
+    throw runtime_error("Tamanho XML inválido: " + value);
+  return parsed;
 }
 
-/**
- * Resumo:
- * Escreve a tag de encerramento (ex: `</diretoria>`) no ficheiro XML,
- * finalizando o nível hierárquico atual. A função consulta e remove o último
- * elemento da pilha de controlo 'PTAG' para garantir o emparelhamento correto
- * das tags e ajusta a indentação. Inclui validação para evitar erros de
- * estrutura (tentar fechar sem abrir), registando um aviso no Logger se a pilha
- * estiver vazia.
- *
- * Parâmetros:
- * - Nenhum (utiliza o estado interno da pilha 'PTAG').
- *
- * Retorno:
- * - void (Não retorna valor).
- */
+void validateItemName(const string &name) {
+  if (name.empty() || name == "." || name == ".." ||
+      name.find('/') != string::npos || name.find('\\') != string::npos ||
+      name.find('\0') != string::npos) {
+    throw runtime_error("Nome de item XML inválido.");
+  }
+}
+
+class XmlReader {
+public:
+  explicit XmlReader(string input) : source(move(input)) {
+    if (source.compare(0, 3, "\xEF\xBB\xBF") == 0)
+      position = 3;
+  }
+
+  unique_ptr<Diretoria> read() {
+    skipWhitespace();
+    if (startsWith("<?xml")) {
+      const size_t declarationEnd = source.find("?>", position + 5);
+      if (declarationEnd == string::npos)
+        fail("Declaração XML incompleta.");
+      position = declarationEnd + 2;
+    }
+
+    skipWhitespace();
+    unique_ptr<Item> root = readItem(".");
+    if (root->getIsFicheiro())
+      fail("O elemento raiz tem de ser uma diretoria.");
+
+    skipWhitespace();
+    if (position != source.size())
+      fail("Conteúdo adicional depois da diretoria raiz.");
+
+    return unique_ptr<Diretoria>(static_cast<Diretoria *>(root.release()));
+  }
+
+private:
+  struct StartTag {
+    string name;
+    unordered_map<string, string> attributes;
+    bool selfClosing = false;
+  };
+
+  string source;
+  size_t position = 0;
+
+  [[noreturn]] void fail(const string &message) const {
+    throw runtime_error(message + " (posição " + to_string(position) + ")");
+  }
+
+  bool startsWith(const string &token) const {
+    return source.compare(position, token.size(), token) == 0;
+  }
+
+  bool skipWhitespace() {
+    const size_t original = position;
+    while (position < source.size() &&
+           isspace(static_cast<unsigned char>(source[position])) != 0)
+      ++position;
+    return position != original;
+  }
+
+  void expect(char expected) {
+    if (position >= source.size() || source[position] != expected)
+      fail(string("Era esperado '") + expected + "'.");
+    ++position;
+  }
+
+  string readIdentifier() {
+    const size_t start = position;
+    while (position < source.size()) {
+      const unsigned char character =
+          static_cast<unsigned char>(source[position]);
+      if (isalnum(character) == 0 && character != '_' && character != '-')
+        break;
+      ++position;
+    }
+    if (start == position)
+      fail("Identificador XML em falta.");
+    return source.substr(start, position - start);
+  }
+
+  string readAttributeValue() {
+    if (position >= source.size() ||
+        (source[position] != '"' && source[position] != '\''))
+      fail("Valor de atributo XML sem aspas.");
+
+    const char quote = source[position++];
+    const size_t start = position;
+    while (position < source.size() && source[position] != quote) {
+      if (source[position] == '<')
+        fail("Carácter '<' não escapado num atributo XML.");
+      ++position;
+    }
+    if (position == source.size())
+      fail("Valor de atributo XML incompleto.");
+
+    const string encoded = source.substr(start, position - start);
+    ++position;
+    return decodeXmlAttribute(encoded);
+  }
+
+  StartTag readStartTag() {
+    expect('<');
+    if (position < source.size() && source[position] == '/')
+      fail("Tag de fecho inesperada.");
+
+    StartTag tag;
+    tag.name = readIdentifier();
+
+    while (true) {
+      const bool hadWhitespace = skipWhitespace();
+      if (startsWith("/>")) {
+        position += 2;
+        tag.selfClosing = true;
+        return tag;
+      }
+      if (position < source.size() && source[position] == '>') {
+        ++position;
+        return tag;
+      }
+      if (!hadWhitespace)
+        fail("Falta espaço antes de um atributo XML.");
+
+      const string attributeName = readIdentifier();
+      skipWhitespace();
+      expect('=');
+      skipWhitespace();
+      string value = readAttributeValue();
+      if (!tag.attributes.emplace(attributeName, move(value)).second)
+        fail("Atributo XML duplicado: " + attributeName);
+    }
+  }
+
+  void readEndTag(const string &expectedName) {
+    if (!startsWith("</"))
+      fail("Tag de fecho em falta para " + expectedName + ".");
+    position += 2;
+    const string actualName = readIdentifier();
+    skipWhitespace();
+    expect('>');
+    if (actualName != expectedName)
+      fail("Tag de fecho inesperada: " + actualName);
+  }
+
+  static string requiredAttribute(const StartTag &tag, const string &name) {
+    const auto found = tag.attributes.find(name);
+    if (found == tag.attributes.end())
+      throw runtime_error("Atributo obrigatório em falta: " + name);
+    return found->second;
+  }
+
+  static void requireAttributeCount(const StartTag &tag, size_t expected) {
+    if (tag.attributes.size() != expected)
+      throw runtime_error("Conjunto de atributos inválido em <" + tag.name +
+                          ">.");
+  }
+
+  unique_ptr<Item> readItem(const string &parentPath) {
+    StartTag tag = readStartTag();
+    if (tag.name == "diretoria")
+      return readDirectory(move(tag), parentPath);
+    if (tag.name == "ficheiro")
+      return readFile(move(tag), parentPath);
+    fail("Elemento XML desconhecido: " + tag.name);
+  }
+
+  unique_ptr<Item> readDirectory(StartTag tag, const string &parentPath) {
+    requireAttributeCount(tag, 2);
+    const string name = requiredAttribute(tag, "nome");
+    const uintmax_t declaredSize =
+        parseSize(requiredAttribute(tag, "tamanho"));
+    validateItemName(name);
+    if (tag.selfClosing)
+      fail("Uma diretoria não pode usar uma tag autocontida.");
+
+    const string path = (fs::path(parentPath) / name).generic_string();
+    auto directory = make_unique<Diretoria>(name, path);
+    unordered_set<string> childNames;
+
+    while (true) {
+      skipWhitespace();
+      if (startsWith("</"))
+        break;
+      if (position >= source.size())
+        fail("Diretoria sem tag de fecho: " + name);
+      auto child = readItem(path);
+      if (!childNames.insert(child->getNome()).second)
+        fail("Nome duplicado na diretoria " + name + ": " +
+             child->getNome());
+      directory->adicionar(move(child));
+    }
+
+    readEndTag("diretoria");
+    const uintmax_t calculatedSize = directory->recalcularTamanho();
+    if (calculatedSize != declaredSize)
+      fail("Tamanho inconsistente na diretoria " + name + ".");
+    return directory;
+  }
+
+  unique_ptr<Item> readFile(StartTag tag, const string &parentPath) {
+    requireAttributeCount(tag, 4);
+    const string name = requiredAttribute(tag, "nome");
+    const uintmax_t size = parseSize(requiredAttribute(tag, "tamanho"));
+    const string extension = requiredAttribute(tag, "extensao");
+    const string modificationDate =
+        requiredAttribute(tag, "dataModificacao");
+    validateItemName(name);
+
+    if (!tag.selfClosing) {
+      skipWhitespace();
+      readEndTag("ficheiro");
+    }
+
+    const string path = (fs::path(parentPath) / name).generic_string();
+    return make_unique<Ficheiro>(name, path, size, extension,
+                                 modificationDate);
+  }
+};
+
+void ensureWritable(const ofstream &output) {
+  if (!output)
+    throw runtime_error("Falha ao escrever o documento XML.");
+}
+
+} // namespace
+
+XML::~XML() {
+  if (output.is_open())
+    output.close();
+}
+
+void XML::WriteStartDocument(const string &ficheiro) {
+  if (output.is_open())
+    output.close();
+  openDirectories = 0;
+  output.open(ficheiro, ios::trunc);
+  if (!output.is_open())
+    throw runtime_error("Não foi possível criar o XML: " + ficheiro);
+  output << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+  ensureWritable(output);
+}
+
+void XML::WriteEndDocument() {
+  if (!output.is_open())
+    return;
+  if (openDirectories != 0)
+    throw runtime_error("Existem diretorias XML por fechar.");
+  output.flush();
+  ensureWritable(output);
+  output.close();
+  ensureWritable(output);
+}
+
+void XML::WriteFile(const string &nome, uintmax_t tamanho,
+                    const string &extensao, const string &dataModificacao) {
+  const string tab = Utils::Tabulacao(openDirectories);
+  output << tab << "<ficheiro nome=\"" << escapeXmlAttribute(nome)
+         << "\" tamanho=\"" << tamanho << "\" extensao=\""
+         << escapeXmlAttribute(extensao) << "\" dataModificacao=\""
+         << escapeXmlAttribute(dataModificacao) << "\"></ficheiro>\n";
+  ensureWritable(output);
+}
+
+void XML::WriteStartDirectory(const string &nome, uintmax_t tamanho) {
+  const string tab = Utils::Tabulacao(openDirectories);
+  output << tab << "<diretoria nome=\"" << escapeXmlAttribute(nome)
+         << "\" tamanho=\"" << tamanho << "\">\n";
+  ensureWritable(output);
+  ++openDirectories;
+}
+
 void XML::WriteEndDirectory() {
-  if (PTAG.size() == 0)
-    Logger::log(Logger::Level::WARNING,
-                "Tentativa de fechar diretoria sem diretoria aberta.");
-  else {
-    string tab = Utils::Tabulacao(PTAG.size() - 1);
-    string el = PTAG.front();
-    FicheiroExp << tab << "</" << el << ">" << endl;
-    PTAG.pop_front();
-  }
+  if (openDirectories == 0)
+    throw runtime_error("Tentativa de fechar uma diretoria XML inexistente.");
+
+  --openDirectories;
+  const string tab = Utils::Tabulacao(openDirectories);
+  output << tab << "</diretoria>\n";
+  ensureWritable(output);
 }
 
-//===========================================IMPORT===========================================
-/**
- * Resumo:
- * Tenta abrir um ficheiro XML existente para leitura/importação. O fluxo é
- * devolvido por valor e gere automaticamente os seus próprios recursos. Se a
- * abertura falhar, regista o erro no Logger e devolve um fluxo fechado.
- *
- * Parâmetros:
- * - ficheiro (const string&): O caminho ou nome do ficheiro XML a ser lido.
- *
- * Retorno:
- * - ifstream: Fluxo aberto e pronto a ler, ou um fluxo fechado em caso de erro.
- */
 ifstream XML::ImportDocument(const string &ficheiro) {
-  ifstream input(ficheiro);
-  if (!input.is_open()) {
+  ifstream input(ficheiro, ios::binary);
+  if (!input.is_open())
     Logger::log(Logger::Level::ERROR_, "Erro ao abrir o XML: " + ficheiro);
-  }
   return input;
 }
 
-/**
- * Resumo:
- * Reconstrói a hierarquia do sistema de ficheiros lendo sequencialmente o fluxo
- * XML. Utiliza expressões regulares (Regex) para interpretar as linhas e
- * identificar:
- * 1. Abertura de diretoria: Cria um novo objeto Diretoria, invoca-se
- * recursivamente para ler o seu conteúdo e adiciona-a à diretoria atual.
- * 2. Ficheiro: Extrai os atributos (nome, tamanho, extensão, data), cria o
- * objeto Ficheiro e adiciona-o à diretoria atual.
- * 3. Fecho de diretoria: Interrompe o ciclo de leitura atual (break),
- * retornando o controlo ao nível anterior da recursão.
- *
- * Parâmetros:
- * - ficheiro (ifstream&): Referência para o fluxo do ficheiro XML aberto para
- * leitura.
- * - dirAtual (Diretoria*): Ponteiro para a diretoria onde os itens lidos serão
- * inseridos.
- *
- * Retorno:
- * - void (Não retorna valor).
- */
-bool XML::ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual) {
-  string linha;
-
-  // static const evita recriar a regex em cada recursão
-  static const regex regexDiretoriaAberta(
-      "<diretoria\\s+nome=\"([^\"]+)\"\\s+tamanho=\"([^\"]+)\">");
-
-  // Atenção: ajustei a regexFicheiro para ser mais legível
-  static const regex regexFicheiro(
-      "<ficheiro\\s+nome=\"([^\"]+)\"\\s+tamanho=\"([^\"]+)\"\\s+extensao=\"([^"
-      "\"]*)\"\\s+dataModificacao=\"([^\"]+)\"></ficheiro>");
-
-  static const regex regexDiretoriaFecho("</diretoria>");
-
-  smatch match;
-
-  while (getline(ficheiro, linha)) {
-    // Remove CR (Windows) de forma segura
-    if (!linha.empty() && linha.back() == '\r')
-      linha.pop_back();
-
-    // 1. Diretoria Aberta -> Recursão
-    if (regex_search(linha, match, regexDiretoriaAberta)) {
-      string nome = match[1];
-      // int tamanho = stoi(match[2]);
-
-      auto nova =
-          make_unique<Diretoria>(nome, dirAtual->getCaminho() + "/" + nome);
-
-      // MERGULHA (Recursão)
-      if (!ReadDirectory(ficheiro, nova.get()))
-        return false;
-
-      // Depois de voltar da recursão (quando encontrou </diretoria>), adiciona
-      // à atual
-      dirAtual->adicionar(move(nova));
-    }
-    // 2. Ficheiro -> Adiciona e continua no loop
-    else if (regex_search(linha, match, regexFicheiro)) {
-      string nome = match[1];
-      int tamanho = stoi(match[2]);
-      string extensao = match[3];
-      string dataModificacao = match[4];
-
-      // Se o construtor aceitar mais dados, passa-os aqui
-      auto novo = make_unique<Ficheiro>(
-          nome, dirAtual->getCaminho() + "/" + nome, tamanho, extensao,
-          dataModificacao);
-      dirAtual->adicionar(move(novo));
-    }
-    // 3. Fecho de Diretoria -> Sai da recursão atual
-    else if (regex_search(linha, regexDiretoriaFecho)) {
-      return true;
-    }
-  }
-  return false;
+unique_ptr<Diretoria> XML::ReadDocument(istream &ficheiro) {
+  const string contents((istreambuf_iterator<char>(ficheiro)),
+                        istreambuf_iterator<char>());
+  if (!ficheiro.eof() && ficheiro.fail())
+    throw runtime_error("Falha ao ler o documento XML.");
+  return XmlReader(contents).read();
 }

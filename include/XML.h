@@ -2,32 +2,32 @@
 #define XML_H
 
 #include "IncludesGerais.h"
-#include "Utils.h"
-
 class Diretoria;
-class Ficheiro;
 
 class XML {
 private:
-  std::list<std::string> PTAG;
-  std::ofstream FicheiroExp;
-  std::ifstream FicheiroImp;
+  std::size_t openDirectories = 0;
+  std::ofstream output;
 
 public:
-  XML();
-  virtual ~XML();
+  XML() = default;
+  ~XML();
+
+  XML(const XML &) = delete;
+  XML &operator=(const XML &) = delete;
 
   //=============WRITE============
-  void WriteStartDocument(std::string ficheiro);
+  void WriteStartDocument(const std::string &ficheiro);
   void WriteEndDocument();
-  void WriteFile(std::string nome, std::uintmax_t tamanho,
-                 std::string extensao, std::string dataModificacao);
-  void WriteStartDirectory(std::string nome, std::uintmax_t tamanho);
+  void WriteFile(const std::string &nome, std::uintmax_t tamanho,
+                 const std::string &extensao,
+                 const std::string &dataModificacao);
+  void WriteStartDirectory(const std::string &nome, std::uintmax_t tamanho);
   void WriteEndDirectory();
 
   //=============READ=============
   std::ifstream ImportDocument(const std::string &ficheiro);
-  bool ReadDirectory(std::ifstream &ficheiro, Diretoria *dirAtual);
+  std::unique_ptr<Diretoria> ReadDocument(std::istream &ficheiro);
 };
 
 #endif // XML_H

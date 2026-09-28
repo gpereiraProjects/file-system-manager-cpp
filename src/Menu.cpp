@@ -245,8 +245,10 @@ void Menu::MenuXML(SistemaFicheiros &SF) {
       cout << "Nome do ficheiro XML: ";
       // Mudei para getline para ser consistente e permitir espaços
       getline(cin, xml);
-      SF.Escrever_XML(xml);
-      cout << "Ficheiro XML exportado com sucesso.\n";
+      if (SF.Escrever_XML(xml))
+        cout << "Ficheiro XML exportado com sucesso.\n";
+      else
+        cout << "Erro ao exportar ficheiro XML.\n";
       Utils::esperarEnter();
       break;
 

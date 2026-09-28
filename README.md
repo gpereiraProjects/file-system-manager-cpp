@@ -113,5 +113,19 @@ temporary test fixtures. The implementation maintains these invariants:
 - batch copies add an in-memory item only after its physical copy succeeds;
 - directory sizes and total file bytes are recalculated after mutations.
 
+## XML persistence
+
+XML snapshots are written to a temporary file and only replace the destination
+after the complete document has been flushed successfully. If replacement
+fails, the previous snapshot is restored whenever one existed.
+
+The XML reader builds a temporary tree and commits it only after validating the
+entire document. It supports escaped and numeric character references, flexible
+attribute order and self-closing file elements. It rejects malformed nesting,
+unknown or duplicate attributes, invalid and overflowing sizes, inconsistent
+directory totals, duplicate child names, multiple roots, unknown entities and
+names that could escape their parent path. Unsupported XML constructs are
+rejected rather than interpreted.
+
 The architecture overview and usage examples will be expanded as the
 portfolio refactoring progresses.

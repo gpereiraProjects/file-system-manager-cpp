@@ -15,7 +15,6 @@
 #include <locale>
 #include <fstream>
 #include <climits>
-#include <regex>
 #include <unordered_set>
 #include <unordered_map>
 #include <stdexcept>

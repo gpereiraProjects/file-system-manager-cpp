@@ -26,7 +26,7 @@ public:
   std::string *DirectoriaMaisEspaco();
   std::string *Search(const std::string &s, int Tipo);
   bool RemoverAll(const std::string &s, const std::string &tipo);
-  void Escrever_XML(const std::string &s);
+  bool Escrever_XML(const std::string &s);
   bool Ler_XML(const std::string &s);
   bool MoveFicheiro(const std::string &Fich, const std::string &DirNova);
   bool MoverDirectoria(const std::string &DirOld,

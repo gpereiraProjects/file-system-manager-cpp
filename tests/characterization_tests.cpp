@@ -158,7 +158,8 @@ void testXmlRoundTrip() {
   expect(original.Load(fixture.root.string()), "Fixture load failed");
 
   const fs::path xmlPath = fixture.root / "snapshot.xml";
-  original.Escrever_XML(xmlPath.string());
+  expect(original.Escrever_XML(xmlPath.string()),
+         "XML export should report success");
   expect(fs::exists(xmlPath), "XML export should create a file");
 
   SistemaFicheiros restored;
@@ -168,6 +169,123 @@ void testXmlRoundTrip() {
          "XML round-trip should preserve the file count");
   expect(restored.ContarDirectorias() == original.ContarDirectorias(),
          "XML round-trip should preserve the directory count");
+}
+
+void testXmlEscapesSpecialCharacters() {
+  TemporaryFixture fixture;
+  const fs::path specialDirectory = fixture.root / "R&D's";
+  fs::create_directories(specialDirectory);
+  {
+    std::ofstream output(specialDirectory / "notes & ideas.txt",
+                         std::ios::binary);
+    output << "special";
+  }
+
+  SistemaFicheiros original;
+  expect(original.Load(fixture.root.string()), "Fixture load failed");
+
+  const fs::path xmlPath = fixture.root / "escaped.xml";
+  expect(original.Escrever_XML(xmlPath.string()),
+         "Special-character XML export should succeed");
+
+  std::ifstream input(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(input)),
+                        std::istreambuf_iterator<char>());
+  input.close();
+  expect(xml.find("R&amp;D&apos;s") != std::string::npos,
+         "Directory names must be escaped in XML attributes");
+  expect(xml.find("notes &amp; ideas.txt") != std::string::npos,
+         "File names must be escaped in XML attributes");
+
+  SistemaFicheiros restored;
+  expect(restored.Ler_XML(xmlPath.string()),
+         "Escaped XML should import successfully");
+  expect(restored.Memoria() == original.Memoria(),
+         "XML round-trip should preserve file sizes");
+  std::unique_ptr<std::string> specialFile(
+      restored.Search("notes & ideas.txt", 0));
+  expect(specialFile != nullptr,
+         "Escaped file names should be decoded during import");
+
+  expect(original.Escrever_XML(xmlPath.string()),
+         "Replacing an existing XML snapshot should succeed");
+  for (const auto &entry : fs::directory_iterator(fixture.root)) {
+    const std::string name = entry.path().filename().string();
+    expect(name.find("escaped.xml.tmp-") == std::string::npos &&
+               name.find("escaped.xml.bak-") == std::string::npos,
+           "Successful XML replacement must not leave temporary files");
+  }
+}
+
+void testXmlAcceptsValidStructuralVariations() {
+  TemporaryFixture fixture;
+  const fs::path xmlPath = fixture.root / "structural.xml";
+  {
+    std::ofstream output(xmlPath, std::ios::binary);
+    output << "<?xml version='1.0' encoding='UTF-8'?>\n"
+              "<diretoria tamanho='3' nome='root'>\n"
+              "  <ficheiro dataModificacao='' extensao='txt' tamanho='3' "
+              "nome='caf&#xE9;.txt'/>\n"
+              "</diretoria>\n";
+  }
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Ler_XML(xmlPath.string()),
+         "Valid attribute order, quotes and self-closing files should import");
+  expect(fileSystem.Memoria() == 3,
+         "Imported numeric metadata should be preserved");
+  std::unique_ptr<std::string> decoded(fileSystem.Search("café.txt", 0));
+  expect(decoded != nullptr,
+         "Numeric XML character references should be decoded as UTF-8");
+}
+
+void testMalformedXmlVariantsPreserveState() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  const std::vector<std::string> invalidDocuments = {
+      "<diretoria nome=\"root\" tamanho=\"99\"></diretoria>",
+      "<diretoria nome=\"root\" nome=\"duplicate\" tamanho=\"0\">"
+      "</diretoria>",
+      "<diretoria nome=\"root\" tamanho=\"184467440737095516160\">"
+      "</diretoria>",
+      "<diretoria nome=\"root\" tamanho=\"1\"><ficheiro nome=\"../escape\" "
+      "tamanho=\"1\" extensao=\"\" dataModificacao=\"\"/></diretoria>",
+      "<diretoria nome=\"root\" tamanho=\"2\"><ficheiro nome=\"same\" "
+      "tamanho=\"1\" extensao=\"\" dataModificacao=\"\"/><ficheiro "
+      "nome=\"same\" tamanho=\"1\" extensao=\"\" "
+      "dataModificacao=\"\"/></diretoria>",
+      "<diretoria nome=\"root\" tamanho=\"0\"></diretoria>"
+      "<diretoria nome=\"second\" tamanho=\"0\"></diretoria>",
+      "<diretoria nome=\"root\" tamanho=\"0\" extra=\"unsupported\">"
+      "</diretoria>",
+      "<diretoria nome=\"bad&unknown;\" tamanho=\"0\"></diretoria>"};
+
+  const fs::path xmlPath = fixture.root / "malformed.xml";
+  for (const std::string &document : invalidDocuments) {
+    {
+      std::ofstream output(xmlPath, std::ios::binary | std::ios::trunc);
+      output << document;
+    }
+    expect(!fileSystem.Ler_XML(xmlPath.string()),
+           "Malformed XML variants must be rejected");
+    expect(fileSystem.ContarFicheiros() == 2,
+           "Rejected XML must preserve the active tree");
+    std::unique_ptr<std::string> original(fileSystem.Search("small.txt", 0));
+    expect(original != nullptr,
+           "Original items must remain available after rejected XML");
+  }
+}
+
+void testXmlExportRejectsDirectoryDestination() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+  expect(!fileSystem.Escrever_XML(fixture.root.string()),
+         "XML export must reject a directory as its destination");
+  expect(fs::exists(fixture.root / "small.txt"),
+         "A rejected export must not alter the destination directory");
 }
 
 void testOwnershipTransfersRemainValid() {
@@ -348,6 +466,10 @@ int main() {
       {"search and largest file", testSearchAndLargestFile},
       {"tree output", testTreeOutput},
       {"XML round-trip", testXmlRoundTrip},
+      {"XML special-character escaping", testXmlEscapesSpecialCharacters},
+      {"XML structural variations", testXmlAcceptsValidStructuralVariations},
+      {"malformed XML variants", testMalformedXmlVariantsPreserveState},
+      {"XML directory destination", testXmlExportRejectsDirectoryDestination},
       {"ownership transfers", testOwnershipTransfersRemainValid},
       {"invalid XML transaction", testInvalidXmlPreservesState},
       {"cyclic directory move", testCyclicDirectoryMoveIsRejected},
