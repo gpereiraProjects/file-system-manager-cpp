@@ -7,9 +7,9 @@
 
 class Diretoria : public Item {
 public:
-  using Conteudo = list<unique_ptr<Item>>;
+  using Conteudo = std::list<std::unique_ptr<Item>>;
 
-  Diretoria(const string &_nome, const string &_caminho);
+  Diretoria(const std::string &nome, const std::string &caminho);
   ~Diretoria() override = default;
 
   Diretoria(const Diretoria &) = delete;
@@ -17,14 +17,13 @@ public:
   Diretoria(Diretoria &&) noexcept = default;
   Diretoria &operator=(Diretoria &&) noexcept = default;
 
-  Conteudo &getConteudo();
-  const Conteudo &getConteudoConst() const;
-  void adicionar(unique_ptr<Item> item);
-  unique_ptr<Item> extrair(Item *item);
-  uintmax_t recalcularTamanho();
-  size_t getNItens() const;
+  const Conteudo &getConteudo() const;
+  void adicionar(std::unique_ptr<Item> item);
+  std::unique_ptr<Item> extrair(Item *item);
+  std::uintmax_t recalcularTamanho();
+  std::size_t getNItens() const;
+  bool getIsFicheiro() const override { return false; }
 
-protected:
 private:
   Conteudo conteudo;
 };

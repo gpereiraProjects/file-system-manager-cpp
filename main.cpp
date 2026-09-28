@@ -4,6 +4,8 @@
 #include "Menu.h"
 #include "Logger.h"
 
+using namespace std;
+
 int main()
 {
     Logger::init("app.log");

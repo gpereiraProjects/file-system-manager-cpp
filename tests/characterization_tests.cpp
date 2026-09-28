@@ -1,3 +1,6 @@
+#include "Diretoria.h"
+#include "Ficheiro.h"
+#include "Item.h"
 #include "Logger.h"
 #include "SistemaFicheiros.h"
 
@@ -8,7 +11,15 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
+
+static_assert(std::is_abstract_v<Item>,
+              "Item must remain an abstract domain base class");
+static_assert(std::has_virtual_destructor_v<Item>,
+              "Items must be safely destructible through the base type");
+static_assert(std::is_base_of_v<Item, Ficheiro>);
+static_assert(std::is_base_of_v<Item, Diretoria>);
 
 namespace {
 

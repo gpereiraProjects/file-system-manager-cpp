@@ -6,18 +6,19 @@
 
 class Ficheiro : public Item {
 public:
-  Ficheiro(const string &_nome, const string &_caminho);
-  Ficheiro(const string &_nome, const string &_caminho, const int &_tamanho,
-           string &_extensao, string &_dataModificacao);
-  virtual ~Ficheiro();
+  Ficheiro(const std::string &nome, const std::string &caminho);
+  Ficheiro(const std::string &nome, const std::string &caminho,
+           std::uintmax_t tamanho, const std::string &extensao,
+           const std::string &dataModificacao);
+  ~Ficheiro() override;
 
-  string getExtensao() const;
-  string getDataModificacao() const;
+  const std::string &getExtensao() const;
+  const std::string &getDataModificacao() const;
+  bool getIsFicheiro() const override { return true; }
 
-protected:
 private:
-  string extensao;
-  string dataModificacao;
+  std::string extensao;
+  std::string dataModificacao;
 };
 
 #endif // FICHEIRO_H

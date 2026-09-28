@@ -17,17 +17,17 @@ public:
    * Inicializa o Logger com o caminho do ficheiro de log.
    * Deve ser chamado 1 vez no início do programa.
    */
-  static void init(const string &path);
+  static void init(const std::string &path);
 
   /**
    * Escreve uma entrada no ficheiro de log.
    * Pode ser chamado de qualquer lugar do programa.
    */
-  static void log(Level level, const string &message);
+  static void log(Level level, const std::string &message);
 
 private:
-  ofstream file; // Ficheiro onde o log é escrito
-  mutex mtx;     // Mutex usado para tornar a escrita thread-safe
+  std::ofstream file; // Ficheiro onde o log é escrito
+  std::mutex mtx;     // Mutex usado para tornar a escrita thread-safe
 
   Logger() = default; // Construtor privado (garantir que existe apenas uma
                       // única instância de uma classe e que essa instância é
@@ -37,10 +37,10 @@ private:
   static Logger &instance();
 
   // Gera timestamp atual como string
-  string timestamp();
+  std::string timestamp();
 
   // Converte enum Level para string
-  string levelToString(Level lvl);
+  std::string levelToString(Level lvl);
 };
 
 #endif

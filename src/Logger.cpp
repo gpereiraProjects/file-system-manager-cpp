@@ -1,6 +1,8 @@
 #include "Logger.h"
 #include "IncludesGerais.h"
 
+using namespace std;
+
 // Retorna a instância única do Logger (padrão Singleton)
 Logger& Logger::instance() {
     // Cria a instância estática apenas na primeira vez que a função é chamada

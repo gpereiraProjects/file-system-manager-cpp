@@ -1,6 +1,9 @@
 #include "Ficheiro.h"
 #include "Logger.h"
 
+using namespace std;
+namespace fs = std::filesystem;
+
 //==================== Construtor e Destrutor ====================
 /**
  * Resumo:
@@ -16,7 +19,7 @@
  * - _caminho (const string&): O caminho completo para o ficheiro no disco.
  */
 Ficheiro::Ficheiro(const string &_nome, const string &_caminho)
-    : Item(_nome, _caminho, true) {
+    : Item(_nome, _caminho) {
   try {
 
     if (fs::exists(caminho) && fs::is_regular_file(caminho))
@@ -48,9 +51,9 @@ Ficheiro::Ficheiro(const string &_nome, const string &_caminho)
 }
 
 Ficheiro::Ficheiro(const string &_nome, const string &_caminho,
-                   const int &_tamanho, string &_extensao,
-                   string &_dataModificacao)
-    : Item(_nome, _caminho, _tamanho, true) {
+                   uintmax_t _tamanho, const string &_extensao,
+                   const string &_dataModificacao)
+    : Item(_nome, _caminho, _tamanho) {
   extensao = _extensao;
   dataModificacao = _dataModificacao;
 }
@@ -60,6 +63,6 @@ Ficheiro::~Ficheiro() {
 }
 
 //===========================================GET===========================================
-string Ficheiro::getExtensao() const { return extensao; }
+const string &Ficheiro::getExtensao() const { return extensao; }
 
-string Ficheiro::getDataModificacao() const { return dataModificacao; }
+const string &Ficheiro::getDataModificacao() const { return dataModificacao; }

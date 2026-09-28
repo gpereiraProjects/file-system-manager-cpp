@@ -2,6 +2,8 @@
 #define INCLUDESGERAIS_H_INCLUDED
 
 #include <filesystem>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <list>
@@ -21,9 +23,8 @@
 #include <mutex>
 #include <memory>
 #include <optional>
-
-using namespace std;
-namespace fs = std::filesystem;
+#include <limits>
+#include <algorithm>
 
 #endif // INCLUDESGERAIS_H_INCLUDED
 

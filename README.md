@@ -87,6 +87,20 @@ for compatibility. Internally, recursive searches use values and
 `std::optional`, and callers immediately wrap compatibility results in
 `std::unique_ptr`.
 
+## Object-oriented design
+
+The domain model is intentionally separated from the console interface:
+
+- `Item` is an abstract base class with a virtual destructor and a polymorphic
+  file-type query;
+- `Ficheiro` and `Diretoria` provide the concrete file and directory behavior;
+- a directory exposes its owned collection as a read-only view, while
+  controlled methods perform additions and ownership transfers;
+- public headers use qualified standard-library names and do not leak namespace
+  directives into consumers;
+- the reusable core library contains the domain and persistence code, while
+  `Menu.cpp` is compiled only into the console executable.
+
 ## Operational safety
 
 Operations that affect the physical file system are exercised only inside

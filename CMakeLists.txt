@@ -28,7 +28,6 @@ set(FILE_SYSTEM_MANAGER_SOURCES
         src/Ficheiro.cpp
         src/Item.cpp
         src/Logger.cpp
-        src/Menu.cpp
         src/SistemaFicheiros.cpp
         src/Utils.cpp
         src/XML.cpp
@@ -68,7 +67,7 @@ endfunction()
 
 file_system_manager_enable_warnings(file_system_manager_core)
 
-add_executable(file_system_manager main.cpp)
+add_executable(file_system_manager main.cpp src/Menu.cpp)
 target_link_libraries(file_system_manager PRIVATE file_system_manager_core)
 file_system_manager_enable_warnings(file_system_manager)
 

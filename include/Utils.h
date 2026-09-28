@@ -9,19 +9,18 @@ private:
   ~Utils() = delete; // impede destruir objetos
 
 public:
-  static string extrairNome(const string &path);
+  static std::string extrairNome(const std::string &path);
   static void UTF8();
-  static string Tabulacao(size_t n);
-  static string NormalizarCaminho(const string &path);
-  static void PrintListaString(list<string> &lista);
-  static bool contemPalavra(const string &texto, const string &palavra);
-  static string gerarSufixo(int n);
-  static string alterarNomeDuplicado(string nome, int n, string extensao);
-  static string NomeDiretoriadoItem(const string &caminho,
-                                    const string &nomeRaiz);
+  static std::string Tabulacao(std::size_t n);
+  static std::string NormalizarCaminho(const std::string &path);
+  static void PrintListaString(std::list<std::string> &lista);
+  static bool contemPalavra(const std::string &texto,
+                            const std::string &palavra);
+  static std::string gerarSufixo(int n);
+  static std::string alterarNomeDuplicado(std::string nome, int n,
+                                          std::string extensao);
   static void limparEcra();
   static void esperarEnter();
-  static string nomeAteParentese(const string &nomeFicheiro);
 };
 
 #endif // UTILS_H

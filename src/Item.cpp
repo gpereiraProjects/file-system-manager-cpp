@@ -1,32 +1,21 @@
 #include "Item.h"
 
-//==================== Construtor e Destrutor ====================
-Item::Item(const string &_nome, const string &_caminho, bool _isFicheiro) {
-  nome = _nome;
-  caminho = _caminho;
-  tamanho = 0;
-  isFicheiro = _isFicheiro;
-}
+using namespace std;
 
-Item::Item(const string &_nome, const string &_caminho, const int &_tamanho,
-           bool _isFicheiro) {
-  nome = _nome;
-  caminho = _caminho;
-  tamanho = _tamanho;
-  isFicheiro = _isFicheiro;
-}
-Item::~Item() {
-  // dtor
-}
+//==================== Construtor e Destrutor ====================
+Item::Item(const string &nomeInicial, const string &caminhoInicial)
+    : nome(nomeInicial), caminho(caminhoInicial), tamanho(0) {}
+
+Item::Item(const string &nomeInicial, const string &caminhoInicial,
+           uintmax_t tamanhoInicial)
+    : nome(nomeInicial), caminho(caminhoInicial), tamanho(tamanhoInicial) {}
 
 //===========================================GET===========================================
-string Item::getNome() { return nome; }
+const string &Item::getNome() const { return nome; }
 
-string Item::getCaminho() { return caminho; }
+const string &Item::getCaminho() const { return caminho; }
 
-uintmax_t Item::getTamanho() { return tamanho; }
-
-bool Item::getIsFicheiro() { return isFicheiro; }
+uintmax_t Item::getTamanho() const { return tamanho; }
 
 //===========================================SET===========================================
 void Item::setCaminho(const string &novoCaminho) { caminho = novoCaminho; }

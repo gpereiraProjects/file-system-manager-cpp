@@ -4,6 +4,9 @@
 #include "Utils.h"
 #include "XML.h"
 
+using namespace std;
+namespace fs = std::filesystem;
+
 //==================== Construtor e Destrutor ====================
 SistemaFicheiros::SistemaFicheiros()
     : raiz(nullptr), importacao_diretoria(false) {}
@@ -59,7 +62,7 @@ int SistemaFicheiros::ContarFicheirosRec(Diretoria *dir) {
   if (dir == nullptr)
     return 0;
   int total = 0;
-  for (const auto &item : dir->getConteudoConst()) {
+  for (const auto &item : dir->getConteudo()) {
     if (item->getIsFicheiro()) {
       total++;
     } else {
@@ -90,7 +93,7 @@ int SistemaFicheiros::ContarDirectoriasRec(Diretoria *dir) {
   if (dir == nullptr)
     return 0;
   int total = 1; // conta a diretoria atual
-  for (const auto &item : dir->getConteudoConst()) {
+  for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
       Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
       if (subdir) {
@@ -306,7 +309,7 @@ optional<string> SistemaFicheiros::pesquisarDiretoriaRec(Diretoria *dir,
     return dir->getCaminho();
   }
 
-  for (const auto &item : dir->getConteudoConst()) {
+  for (const auto &item : dir->getConteudo()) {
 
     if (!item->getIsFicheiro() && item->getNome() == s) {
       return item->getCaminho();
@@ -339,7 +342,7 @@ optional<string> SistemaFicheiros::pesquisarDiretoriaRec(Diretoria *dir,
  */
 optional<string> SistemaFicheiros::pesquisarFicheiroRec(Diretoria *dir,
                                                         const string &s) {
-  for (const auto &item : dir->getConteudoConst()) {
+  for (const auto &item : dir->getConteudo()) {
 
     if (item->getIsFicheiro() && item->getNome() == s) {
       return item->getCaminho();
@@ -475,9 +478,8 @@ bool SistemaFicheiros::RemovePorNome(Diretoria *dir, const string &s,
  */
 bool SistemaFicheiros::removerPorCaminho(Diretoria *dir,
                                          const string &caminho) {
-  for (auto it = dir->getConteudo().begin(); it != dir->getConteudo().end();
-       ++it) {
-    Item *item = it->get();
+  for (const auto &ownedItem : dir->getConteudo()) {
+    Item *item = ownedItem.get();
 
     if (Utils::NormalizarCaminho(item->getCaminho()) ==
         Utils::NormalizarCaminho(caminho)) {

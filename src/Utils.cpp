@@ -1,5 +1,8 @@
 #include "Utils.h"
 
+using namespace std;
+namespace fs = std::filesystem;
+
 /**
  * Resumo:
  * Utilitário que extrai o nome final (ficheiro ou diretoria folha) de um
@@ -182,65 +185,4 @@ void Utils::esperarEnter() {
   cout << "Pressione Enter para continuar...";
   cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
   cin.get();
-}
-
-/**
- * Resumo:
- * Identifica o nome da diretoria "pai" (imediata) onde um determinado item está
- * localizado, baseando-se no seu caminho completo. Utiliza a biblioteca
- * filesystem para navegar na estrutura do caminho. Caso o item não tenha pai
- * identificável (ex: está na raiz do sistema) ou o nome extraído seja vazio,
- * retorna o nome da diretoria raiz como salvaguarda.
- *
- * Parâmetros:
- * - caminho (const string&): O caminho completo do ficheiro ou diretoria em
- * questão.
- * - nomeRaiz (const string&): O nome da diretoria raiz do sistema, a ser
- * retornado caso o item esteja localizado no nível superior da hierarquia.
- *
- * Retorno:
- * - string: O nome da diretoria que contém o item (ou o nome da raiz se não
- * houver pai).
- */
-string Utils::NomeDiretoriadoItem(const string &caminho,
-                                  const string &nomeRaiz) {
-  fs::path p = fs::path(caminho);
-
-  // diretoria onde o ficheiro está
-  fs::path parent = p.parent_path();
-
-  if (parent.empty())
-    return nomeRaiz;
-
-  string nomeDiretoria = Utils::extrairNome(parent.string());
-
-  if (nomeDiretoria.empty())
-    return nomeRaiz;
-
-  return nomeDiretoria;
-}
-
-/**
- * Resumo:
- * Extrai a parte inicial de um nome de ficheiro até encontrar o primeiro
- * parêntese de abertura '('. Esta função é utilizada essencialmente para
- * ignorar sufixos numéricos de cópias (ex: "Ficheiro(1)") e obter o nome base
- * original. Se o nome não contiver parênteses, retorna a string completa
- * inalterada.
- *
- * Parâmetros:
- * - nomeFicheiro (const string&): A string contendo o nome do ficheiro a
- * processar.
- *
- * Retorno:
- * - string: A substring desde o início até à posição do parêntese (exclusivo),
- * ou o nome original caso não exista separador.
- */
-string Utils::nomeAteParentese(const string &nomeFicheiro) {
-  size_t pos = nomeFicheiro.find('('); // encontra o primeiro '('
-  if (pos == string::npos) {
-    return nomeFicheiro; // não tem '(', devolve o nome inteiro
-  }
-  return nomeFicheiro.substr(0,
-                             pos); // devolve da posição 0 até '(' (não inclui)
 }

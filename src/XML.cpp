@@ -3,6 +3,8 @@
 #include "Ficheiro.h"
 #include "Logger.h"
 
+using namespace std;
+
 //==================== Construtor e Destrutor ====================
 XML::XML() {
   // ctor

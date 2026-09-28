@@ -7,29 +7,27 @@
 class Diretoria;
 class Ficheiro;
 
-using namespace std;
-
 class XML {
 private:
-  list<string> PTAG;
-  ofstream FicheiroExp;
-  ifstream FicheiroImp;
+  std::list<std::string> PTAG;
+  std::ofstream FicheiroExp;
+  std::ifstream FicheiroImp;
 
 public:
   XML();
   virtual ~XML();
 
   //=============WRITE============
-  void WriteStartDocument(string ficheiro);
+  void WriteStartDocument(std::string ficheiro);
   void WriteEndDocument();
-  void WriteFile(string nome, uintmax_t tamanho, string extensao,
-                 string dataModificacao);
-  void WriteStartDirectory(string nome, uintmax_t tamanho);
+  void WriteFile(std::string nome, std::uintmax_t tamanho,
+                 std::string extensao, std::string dataModificacao);
+  void WriteStartDirectory(std::string nome, std::uintmax_t tamanho);
   void WriteEndDirectory();
 
   //=============READ=============
-  ifstream ImportDocument(const string &ficheiro);
-  bool ReadDirectory(ifstream &ficheiro, Diretoria *dirAtual);
+  std::ifstream ImportDocument(const std::string &ficheiro);
+  bool ReadDirectory(std::ifstream &ficheiro, Diretoria *dirAtual);
 };
 
 #endif // XML_H

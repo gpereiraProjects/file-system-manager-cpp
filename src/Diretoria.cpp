@@ -1,16 +1,16 @@
 #include "Diretoria.h"
 #include "Ficheiro.h"
 
+using namespace std;
+
 //==================== Construtor e Destrutor ====================
 Diretoria::Diretoria(const string &_nome, const string &_caminho)
-    : Item(_nome, _caminho, false) {
+    : Item(_nome, _caminho) {
   tamanho = 0;
 }
 
 //==================== Métodos Públicos ====================
-Diretoria::Conteudo &Diretoria::getConteudo() { return conteudo; }
-
-const Diretoria::Conteudo &Diretoria::getConteudoConst() const {
+const Diretoria::Conteudo &Diretoria::getConteudo() const {
   return conteudo;
 }
 
