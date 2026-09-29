@@ -26,6 +26,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Strict Clang warnings detected by the macOS continuous-integration build.
+- Unbounded Windows test execution and symbolic-link fixture cleanup.
+- Deprecated Node.js runtime warnings from the checkout workflow action.
 - Invalid menu input and end-of-file handling.
 - File and directory rename validation, collisions, and rollback.
 - Ambiguous searches and moves when names are repeated.

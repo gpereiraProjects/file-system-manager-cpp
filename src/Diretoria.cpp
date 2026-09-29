@@ -16,13 +16,13 @@ const Diretoria::Conteudo &Diretoria::getConteudo() const {
 
 void Diretoria::adicionar(unique_ptr<Item> item) {
   tamanho += item->getTamanho();
-  conteudo.push_back(move(item));
+  conteudo.push_back(std::move(item));
 }
 
 unique_ptr<Item> Diretoria::extrair(Item *item) {
   for (auto it = conteudo.begin(); it != conteudo.end(); ++it) {
     if (it->get() == item) {
-      auto extraido = move(*it);
+      auto extraido = std::move(*it);
       conteudo.erase(it);
       recalcularTamanho();
       return extraido;

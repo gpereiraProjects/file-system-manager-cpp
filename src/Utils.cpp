@@ -100,9 +100,10 @@ bool Utils::nomeItemPortatilValido(const string &nome) {
     return false;
 
   static const string caracteresInvalidos = "<>:\"/\\|?*";
-  for (const unsigned char character : nome) {
-    if (character < 32U ||
-        caracteresInvalidos.find(static_cast<char>(character)) != string::npos)
+  for (const char character : nome) {
+    const auto unsignedCharacter = static_cast<unsigned char>(character);
+    if (unsignedCharacter < 32U ||
+        caracteresInvalidos.find(character) != string::npos)
       return false;
   }
 
@@ -110,8 +111,9 @@ bool Utils::nomeItemPortatilValido(const string &nome) {
   while (!nomeBase.empty() && nomeBase.back() == ' ')
     nomeBase.pop_back();
   transform(nomeBase.begin(), nomeBase.end(), nomeBase.begin(),
-            [](const unsigned char character) {
-              return static_cast<char>(toupper(character));
+            [](const char character) {
+              return static_cast<char>(
+                  toupper(static_cast<unsigned char>(character)));
             });
 
   static const unordered_set<string> nomesReservados = {
@@ -127,9 +129,9 @@ bool Utils::nomesItemEquivalentes(const string &left, const string &right) {
     return false;
 
   return equal(left.begin(), left.end(), right.begin(),
-               [](const unsigned char leftCharacter,
-                  const unsigned char rightCharacter) {
-                 return toupper(leftCharacter) == toupper(rightCharacter);
+               [](const char leftCharacter, const char rightCharacter) {
+                 return toupper(static_cast<unsigned char>(leftCharacter)) ==
+                        toupper(static_cast<unsigned char>(rightCharacter));
                });
 }
 

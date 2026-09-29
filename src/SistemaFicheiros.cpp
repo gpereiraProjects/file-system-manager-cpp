@@ -22,8 +22,9 @@ string identidadeDiretoria(const fs::path &path) {
   string identity = canonicalPath.lexically_normal().generic_string();
 #ifdef _WIN32
   transform(identity.begin(), identity.end(), identity.begin(),
-            [](const unsigned char character) {
-              return static_cast<char>(tolower(character));
+            [](const char character) {
+              return static_cast<char>(
+                  tolower(static_cast<unsigned char>(character)));
             });
 #endif
   return identity;
@@ -88,7 +89,7 @@ void SistemaFicheiros::carregarConteudo(
 
       auto sub = make_unique<Diretoria>(nome, caminhoCompleto);
       carregarConteudo(sub.get(), diretoriasVisitadas);
-      diretoria->adicionar(move(sub));
+      diretoria->adicionar(std::move(sub));
     } else if (fs::is_regular_file(targetStatus)) {
       diretoria->adicionar(make_unique<Ficheiro>(nome, caminhoCompleto));
     }
@@ -259,7 +260,7 @@ string SistemaFicheiros::maiorDiretoriaRec(const Diretoria *dir,
 
       if (subMax > localMax) {
         localMax = subMax;
-        localName = move(nomeSub);
+        localName = std::move(nomeSub);
       }
     }
   }
@@ -301,7 +302,7 @@ string SistemaFicheiros::menorDiretoriaRec(const Diretoria *dir,
 
       if (subMin < localMin) {
         localMin = subMin;
-        localName = move(nomeSub);
+        localName = std::move(nomeSub);
       }
     }
   }
@@ -843,7 +844,7 @@ bool SistemaFicheiros::copiarItemRec(Diretoria *dirOrigem, Diretoria *destino,
       }
 
       copia->setCaminho(caminhoDestino.string());
-      destino->adicionar(move(copia));
+      destino->adicionar(std::move(copia));
     } else {
       // Recursão: percorrer subdiretórios
       Diretoria *d = dynamic_cast<Diretoria *>(item.get());
@@ -889,7 +890,7 @@ bool SistemaFicheiros::Load(const string &path) {
     diretoriasVisitadas.insert(identidadeDiretoria(caminho));
     carregarConteudo(novaRaiz.get(), diretoriasVisitadas);
     novaRaiz->recalcularTamanho();
-    raiz = move(novaRaiz);
+    raiz = std::move(novaRaiz);
   } catch (const exception &e) {
     ostringstream ss;
     ss << "Erro ao carregar sistema de ficheiros: " << e.what();
@@ -1194,7 +1195,7 @@ bool SistemaFicheiros::Ler_XML(const string &s) {
 
   try {
     auto novaRaiz = xmlParser.ReadDocument(ficheiro);
-    raiz = move(novaRaiz);
+    raiz = std::move(novaRaiz);
     importacao_diretoria = false;
     return true;
   } catch (const exception &e) {
@@ -1291,7 +1292,7 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
 
   // adicionar o item à nova diretoria
   Item *itemMovidoPtr = itemMovido.get();
-  dirNova->adicionar(move(itemMovido));
+  dirNova->adicionar(std::move(itemMovido));
 
   itemMovidoPtr->setCaminho(novoCaminho.string());
   raiz->recalcularTamanho();
@@ -1386,7 +1387,7 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
   }
   Diretoria *diretoriaMovidaPtr =
       dynamic_cast<Diretoria *>(diretoriaMovida.get());
-  dirNova->adicionar(move(diretoriaMovida));
+  dirNova->adicionar(std::move(diretoriaMovida));
 
   // atualizar caminhos internos
   string novoCaminhoString = novoCaminho.string();

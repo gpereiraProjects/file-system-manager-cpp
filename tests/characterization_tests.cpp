@@ -410,6 +410,11 @@ void testSymbolicLinkCyclesAreIgnored() {
       fileSystem.Search("documents/back-to-root", TipoItem::Diretoria));
   expect(!ignoredLink,
          "An ignored symbolic link must not be searchable as a directory");
+
+  std::error_code cleanupError;
+  fs::remove(cycle, cleanupError);
+  expect(!cleanupError,
+         "The symbolic-link fixture should be removed before cleanup");
 }
 
 void testSearchAndLargestFile() {
@@ -1058,12 +1063,13 @@ int main() {
 
   std::size_t failures = 0;
   for (const auto &[name, test] : tests) {
+    std::cout << "[RUN] " << name << std::endl;
     try {
       test();
-      std::cout << "[PASS] " << name << '\n';
+      std::cout << "[PASS] " << name << std::endl;
     } catch (const std::exception &error) {
       ++failures;
-      std::cerr << "[FAIL] " << name << ": " << error.what() << '\n';
+      std::cerr << "[FAIL] " << name << ": " << error.what() << std::endl;
     }
   }
 

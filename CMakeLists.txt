@@ -98,6 +98,12 @@ if(BUILD_TESTING)
         COMMAND file_system_manager_characterization_tests
     )
 
+    set_tests_properties(
+        file_system_manager_characterization
+        PROPERTIES
+            TIMEOUT 120
+    )
+
     if(WIN32)
         cmake_path(GET CMAKE_CXX_COMPILER PARENT_PATH compiler_runtime_dir)
         set_tests_properties(

@@ -135,7 +135,7 @@ void validateItemName(const string &name) {
 
 class XmlReader {
 public:
-  explicit XmlReader(string input) : source(move(input)) {
+  explicit XmlReader(string input) : source(std::move(input)) {
     if (source.compare(0, 3, "\xEF\xBB\xBF") == 0)
       position = 3;
   }
@@ -254,7 +254,7 @@ private:
       expect('=');
       skipWhitespace();
       string value = readAttributeValue();
-      if (!tag.attributes.emplace(attributeName, move(value)).second)
+      if (!tag.attributes.emplace(attributeName, std::move(value)).second)
         fail("Atributo XML duplicado: " + attributeName);
     }
   }
@@ -286,9 +286,9 @@ private:
   unique_ptr<Item> readItem(const string &parentPath) {
     StartTag tag = readStartTag();
     if (tag.name == "diretoria")
-      return readDirectory(move(tag), parentPath);
+      return readDirectory(std::move(tag), parentPath);
     if (tag.name == "ficheiro")
-      return readFile(move(tag), parentPath);
+      return readFile(std::move(tag), parentPath);
     fail("Elemento XML desconhecido: " + tag.name);
   }
 
@@ -319,7 +319,7 @@ private:
       if (duplicate)
         fail("Nome duplicado na diretoria " + name + ": " +
              child->getNome());
-      directory->adicionar(move(child));
+      directory->adicionar(std::move(child));
     }
 
     readEndTag("diretoria");
