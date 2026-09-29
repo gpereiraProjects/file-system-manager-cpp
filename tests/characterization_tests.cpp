@@ -179,6 +179,22 @@ bool createDirectorySymlinkForTest(const fs::path &target,
 #endif
 }
 
+bool removeDirectorySymlinkForTest(const fs::path &link,
+                                   std::error_code &error) {
+#ifdef _WIN32
+  if (RemoveDirectoryW(link.c_str()) != 0) {
+    error.clear();
+    return true;
+  }
+
+  error = std::error_code(static_cast<int>(GetLastError()),
+                          std::system_category());
+  return false;
+#else
+  return fs::remove(link, error);
+#endif
+}
+
 void testLoadAndStatistics() {
   TemporaryFixture fixture;
   SistemaFicheiros fileSystem;
@@ -400,6 +416,11 @@ void testSymbolicLinkCyclesAreIgnored() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()),
          "A tree containing a symbolic-link cycle should load safely");
+
+  std::error_code cleanupError;
+  expect(removeDirectorySymlinkForTest(cycle, cleanupError) && !cleanupError,
+         "The symbolic-link fixture should be removed before cleanup");
+
   expect(fileSystem.ContarDirectorias() == 3,
          "A symbolic directory link must not become part of the loaded tree");
   expect(fileSystem.ContarFicheiros() == 2,
@@ -410,11 +431,6 @@ void testSymbolicLinkCyclesAreIgnored() {
       fileSystem.Search("documents/back-to-root", TipoItem::Diretoria));
   expect(!ignoredLink,
          "An ignored symbolic link must not be searchable as a directory");
-
-  std::error_code cleanupError;
-  fs::remove(cycle, cleanupError);
-  expect(!cleanupError,
-         "The symbolic-link fixture should be removed before cleanup");
 }
 
 void testSearchAndLargestFile() {
