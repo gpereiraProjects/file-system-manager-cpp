@@ -169,8 +169,7 @@ size_t SistemaFicheiros::ContarDirectoriasRec(const Diretoria *dir) const {
  * 'tamMax'.
  *
  * Retorno:
- * - string*: Ponteiro para a string 'strMax' contendo o caminho do maior
- * ficheiro. Retorna nullptr se a diretoria inicial for nula.
+ * - void: Atualiza `tamMax` e `strMax` quando encontra um ficheiro maior.
  */
 void SistemaFicheiros::ficheiroMaiorRec(const Diretoria *dir,
                                         uintmax_t &tamMax,
@@ -239,8 +238,7 @@ uintmax_t SistemaFicheiros::memoriaRec(const Diretoria *dir) const {
  * itens encontrados até o momento.
  *
  * Retorno:
- * - string*: Ponteiro para uma string contendo o nome da diretoria com mais
- * itens.
+ * - string: Nome da diretoria com mais itens.
  */
 string SistemaFicheiros::maiorDiretoriaRec(const Diretoria *dir,
                                            size_t &maior) const {
@@ -282,8 +280,7 @@ string SistemaFicheiros::maiorDiretoriaRec(const Diretoria *dir,
  * itens encontrados até o momento.
  *
  * Retorno:
- * - string*: Ponteiro para uma string contendo o nome da diretoria com menos
- * itens.
+ * - string: Nome da diretoria com menos itens.
  */
 string SistemaFicheiros::menorDiretoriaRec(const Diretoria *dir,
                                            size_t &menor) const {
@@ -328,8 +325,7 @@ string SistemaFicheiros::menorDiretoriaRec(const Diretoria *dir,
  * diretoria vencedora.
  *
  * Retorno:
- * - string*: Ponteiro para a variável 'strMax' (contendo o caminho da maior
- * diretoria encontrada).
+ * - void: Atualiza `tamMax` e `strMax` quando encontra uma diretoria maior.
  */
 void SistemaFicheiros::diretoriaMaisEspaco(const Diretoria *dir,
                                            uintmax_t &tamMax,
