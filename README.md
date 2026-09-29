@@ -83,10 +83,10 @@ The in-memory tree uses `std::unique_ptr` to express exclusive ownership:
   pointers;
 - XML streams and temporary trees rely on automatic lifetime management.
 
-The original assignment's public `std::string*` return types remain available
-for compatibility. Internally, recursive searches use values and
-`std::optional`, and callers immediately wrap compatibility results in
-`std::unique_ptr`.
+The public API returns values and `std::optional` results, so callers never
+receive owning raw pointers or need to call `delete`. Item categories use the
+strong `SistemaFicheiros::TipoItem` enumeration instead of numeric or textual
+sentinels, and collection queries return their results by value.
 
 ## Object-oriented design
 

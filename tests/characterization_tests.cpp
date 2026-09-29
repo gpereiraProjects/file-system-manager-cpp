@@ -33,10 +33,22 @@ static_assert(std::has_virtual_destructor_v<Item>,
               "Items must be safely destructible through the base type");
 static_assert(std::is_base_of_v<Item, Ficheiro>);
 static_assert(std::is_base_of_v<Item, Diretoria>);
+static_assert(std::is_same_v<
+              decltype(std::declval<SistemaFicheiros>().Search(
+                  std::declval<const std::string &>(),
+                  SistemaFicheiros::TipoItem::Ficheiro)),
+              std::optional<std::string>>,
+              "Search results must use value semantics");
+static_assert(std::is_same_v<
+              decltype(std::declval<SistemaFicheiros>().PesquisarAllFicheiros(
+                  std::declval<const std::string &>())),
+              std::list<std::string>>,
+              "Collection queries must return owned values");
 
 namespace {
 
 namespace fs = std::filesystem;
+using TipoItem = SistemaFicheiros::TipoItem;
 
 class ScopedConsoleInput {
 public:
@@ -107,6 +119,11 @@ void expect(bool condition, const std::string &message) {
   }
 }
 
+template <typename T>
+void expect(const std::optional<T> &condition, const std::string &message) {
+  expect(condition.has_value(), message);
+}
+
 bool createDirectorySymlinkForTest(const fs::path &target,
                                    const fs::path &link,
                                    std::error_code &error) {
@@ -149,18 +166,18 @@ void testLoadAndStatistics() {
   expect(fileSystem.Memoria() == 12,
          "Memory usage should equal the total file size in bytes");
 
-  std::unique_ptr<std::string> mostItems(
+  std::optional<std::string> mostItems(
       fileSystem.DirectoriaMaisElementos());
-  expect(mostItems != nullptr && *mostItems == fixture.root.filename().string(),
+  expect(mostItems && *mostItems == fixture.root.filename().string(),
          "The root should contain the greatest number of direct items");
 
-  std::unique_ptr<std::string> fewestItems(
+  std::optional<std::string> fewestItems(
       fileSystem.DirectoriaMenosElementos());
-  expect(fewestItems != nullptr && *fewestItems == "empty",
+  expect(fewestItems && *fewestItems == "empty",
          "The empty directory should contain the fewest items");
 
-  std::unique_ptr<std::string> mostSpace(fileSystem.DirectoriaMaisEspaco());
-  expect(mostSpace != nullptr && fs::path(*mostSpace).filename() == "documents",
+  std::optional<std::string> mostSpace(fileSystem.DirectoriaMaisEspaco());
+  expect(mostSpace && fs::path(*mostSpace).filename() == "documents",
          "The documents directory should occupy the most space");
 }
 
@@ -235,8 +252,9 @@ void testInvalidDirectoryIsRejected() {
          "A missing directory should be rejected");
   expect(fileSystem.ContarFicheiros() == 2,
          "A rejected load should preserve the previous state");
-  std::unique_ptr<std::string> preserved(fileSystem.Search("small.txt", 0));
-  expect(preserved != nullptr,
+  std::optional<std::string> preserved(
+      fileSystem.Search("small.txt", TipoItem::Ficheiro));
+  expect(preserved,
          "Previously loaded items should survive a rejected load");
 }
 
@@ -259,9 +277,9 @@ void testSymbolicLinkCyclesAreIgnored() {
          "A symbolic-link cycle must not duplicate files");
   expect(fileSystem.Memoria() == 12,
          "A symbolic-link cycle must not duplicate file sizes");
-  std::unique_ptr<std::string> ignoredLink(
-      fileSystem.Search("documents/back-to-root", 1));
-  expect(ignoredLink == nullptr,
+  std::optional<std::string> ignoredLink(
+      fileSystem.Search("documents/back-to-root", TipoItem::Diretoria));
+  expect(!ignoredLink,
          "An ignored symbolic link must not be searchable as a directory");
 }
 
@@ -270,23 +288,23 @@ void testSearchAndLargestFile() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
 
-  std::unique_ptr<std::string> filePath(
-      fileSystem.Search("documents/largest.bin", 0));
-  expect(filePath != nullptr, "The nested file should be found");
+  std::optional<std::string> filePath(
+      fileSystem.Search("documents/largest.bin", TipoItem::Ficheiro));
+  expect(filePath, "The nested file should be found");
   expect(fs::path(*filePath).filename() == "largest.bin",
          "File search should return the complete matching path");
 
-  std::unique_ptr<std::string> directoryPath(
-      fileSystem.Search("documents", 1));
-  expect(directoryPath != nullptr, "The nested directory should be found");
+  std::optional<std::string> directoryPath(
+      fileSystem.Search("documents", TipoItem::Diretoria));
+  expect(directoryPath, "The nested directory should be found");
   expect(fs::path(*directoryPath).filename() == "documents",
          "Directory search should return the complete matching path");
 
-  expect(fileSystem.Search("missing.txt", 0) == nullptr,
+  expect(!fileSystem.Search("missing.txt", TipoItem::Ficheiro),
          "A missing file should not produce a result");
 
-  std::unique_ptr<std::string> largest(fileSystem.FicheiroMaior());
-  expect(largest != nullptr, "A largest file should be returned");
+  std::optional<std::string> largest(fileSystem.FicheiroMaior());
+  expect(largest, "A largest file should be returned");
   expect(fs::path(*largest).filename() == "largest.bin",
          "The largest fixture file should be selected");
 }
@@ -305,13 +323,13 @@ void testPathSearchSelectsExactItems() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
 
-  std::unique_ptr<std::string> rootFile(fileSystem.Search("small.txt", 0));
-  std::unique_ptr<std::string> documentsFile(
-      fileSystem.Search("documents/small.txt", 0));
-  std::unique_ptr<std::string> emptyFile(
-      fileSystem.Search("empty/small.txt", 0));
-  expect(rootFile != nullptr && documentsFile != nullptr &&
-             emptyFile != nullptr,
+  std::optional<std::string> rootFile(
+      fileSystem.Search("small.txt", TipoItem::Ficheiro));
+  std::optional<std::string> documentsFile(
+      fileSystem.Search("documents/small.txt", TipoItem::Ficheiro));
+  std::optional<std::string> emptyFile(
+      fileSystem.Search("empty/small.txt", TipoItem::Ficheiro));
+  expect(rootFile && documentsFile && emptyFile,
          "Relative paths should resolve every repeated filename exactly");
   expect(fs::path(*rootFile).parent_path() == fixture.root,
          "A leaf path should resolve only at the root level");
@@ -319,22 +337,23 @@ void testPathSearchSelectsExactItems() {
              fs::path(*emptyFile).parent_path().filename() == "empty",
          "Nested paths should select the requested parent directory");
 
-  std::unique_ptr<std::string> absoluteFile(fileSystem.Search(
-      (fixture.root / "documents" / "small.txt").string(), 0));
-  expect(absoluteFile != nullptr && *absoluteFile == *documentsFile,
+  std::optional<std::string> absoluteFile(fileSystem.Search(
+      (fixture.root / "documents" / "small.txt").string(),
+      TipoItem::Ficheiro));
+  expect(absoluteFile && *absoluteFile == *documentsFile,
          "An absolute path inside the loaded root should also resolve");
-  expect(fileSystem.Search("largest.bin", 0) == nullptr,
+  expect(!fileSystem.Search("largest.bin", TipoItem::Ficheiro),
          "A bare name must not silently select a nested item");
-  expect(fileSystem.Search("../small.txt", 0) == nullptr,
+  expect(!fileSystem.Search("../small.txt", TipoItem::Ficheiro),
          "A path must not escape the loaded root");
-  expect(fileSystem.Search("documents/small.txt", 1) == nullptr,
+  expect(!fileSystem.Search("documents/small.txt", TipoItem::Diretoria),
          "Path search must enforce the requested item type");
 
-  std::unique_ptr<std::string> modificationDate(
+  std::optional<std::string> modificationDate(
       fileSystem.DataFicheiro("documents/small.txt"));
-  expect(modificationDate != nullptr,
+  expect(modificationDate,
          "File metadata lookup should use the same exact path resolution");
-  expect(fileSystem.DataFicheiro("largest.bin") == nullptr,
+  expect(!fileSystem.DataFicheiro("largest.bin"),
          "File metadata lookup must not fall back to recursive name search");
 }
 
@@ -382,7 +401,7 @@ void testTreeOutput() {
 
   const fs::path treePath = fixture.root / "tree-output.txt";
   const std::string treePathString = treePath.string();
-  fileSystem.Tree(&treePathString);
+  fileSystem.Tree(treePathString);
 
   std::ifstream input(treePath);
   const std::string tree((std::istreambuf_iterator<char>(input)),
@@ -443,9 +462,9 @@ void testXmlEscapesSpecialCharacters() {
          "Escaped XML should import successfully");
   expect(restored.Memoria() == original.Memoria(),
          "XML round-trip should preserve file sizes");
-  std::unique_ptr<std::string> specialFile(
-      restored.Search("R&D's/notes & ideas.txt", 0));
-  expect(specialFile != nullptr,
+  std::optional<std::string> specialFile(
+      restored.Search("R&D's/notes & ideas.txt", TipoItem::Ficheiro));
+  expect(specialFile,
          "Escaped file names should be decoded during import");
 
   expect(original.Escrever_XML(xmlPath.string()),
@@ -475,8 +494,9 @@ void testXmlAcceptsValidStructuralVariations() {
          "Valid attribute order, quotes and self-closing files should import");
   expect(fileSystem.Memoria() == 3,
          "Imported numeric metadata should be preserved");
-  std::unique_ptr<std::string> decoded(fileSystem.Search("café.txt", 0));
-  expect(decoded != nullptr,
+  std::optional<std::string> decoded(
+      fileSystem.Search("café.txt", TipoItem::Ficheiro));
+  expect(decoded,
          "Numeric XML character references should be decoded as UTF-8");
 }
 
@@ -520,8 +540,9 @@ void testMalformedXmlVariantsPreserveState() {
            "Malformed XML variants must be rejected");
     expect(fileSystem.ContarFicheiros() == 2,
            "Rejected XML must preserve the active tree");
-    std::unique_ptr<std::string> original(fileSystem.Search("small.txt", 0));
-    expect(original != nullptr,
+    std::optional<std::string> original(
+        fileSystem.Search("small.txt", TipoItem::Ficheiro));
+    expect(original,
            "Original items must remain available after rejected XML");
   }
 }
@@ -546,9 +567,9 @@ void testOwnershipTransfersRemainValid() {
   expect(fileSystem.ContarFicheiros() == 2,
          "Moving a file should preserve the file count");
 
-  std::unique_ptr<std::string> movedFile(
-      fileSystem.Search("documents/small.txt", 0));
-  expect(movedFile != nullptr, "The moved file should remain searchable");
+  std::optional<std::string> movedFile(
+      fileSystem.Search("documents/small.txt", TipoItem::Ficheiro));
+  expect(movedFile, "The moved file should remain searchable");
   expect(fs::path(*movedFile).parent_path().filename() == "documents",
          "The moved file path should reference its new parent");
 
@@ -559,16 +580,16 @@ void testOwnershipTransfersRemainValid() {
   expect(fileSystem.ContarFicheiros() == 2,
          "Moving a directory should preserve all contained files");
 
-  std::unique_ptr<std::string> movedDirectory(
-      fileSystem.Search("empty/documents", 1));
-  expect(movedDirectory != nullptr,
+  std::optional<std::string> movedDirectory(
+      fileSystem.Search("empty/documents", TipoItem::Diretoria));
+  expect(movedDirectory,
          "The moved directory should remain searchable");
   expect(fs::path(*movedDirectory).parent_path().filename() == "empty",
          "The moved directory path should reference its new parent");
 
-  std::unique_ptr<std::string> largestDirectory(
+  std::optional<std::string> largestDirectory(
       fileSystem.DirectoriaMaisEspaco());
-  expect(largestDirectory != nullptr,
+  expect(largestDirectory,
          "The largest directory query should return a result");
   expect(fs::path(*largestDirectory).filename() == "empty",
          "Directory sizes should be recalculated after ownership transfers");
@@ -592,8 +613,9 @@ void testInvalidXmlPreservesState() {
          "An incomplete XML document should be rejected");
   expect(fileSystem.ContarFicheiros() == 2,
          "A rejected XML import should preserve the previous state");
-  std::unique_ptr<std::string> original(fileSystem.Search("small.txt", 0));
-  expect(original != nullptr,
+  std::optional<std::string> original(
+      fileSystem.Search("small.txt", TipoItem::Ficheiro));
+  expect(original,
          "Original data should remain available after invalid XML");
 }
 
@@ -616,7 +638,7 @@ void testRemovalUpdatesStatistics() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
 
-  expect(fileSystem.RemoverAll("small.txt", "FICH"),
+  expect(fileSystem.RemoverAll("small.txt", TipoItem::Ficheiro),
          "An existing file should be removed from the in-memory tree");
   expect(fileSystem.ContarFicheiros() == 1,
          "Removal should update the file count");
@@ -660,10 +682,11 @@ void testRenameKeepsDiskAndMemoryConsistent() {
          "The original physical filename should no longer exist");
   expect(fs::exists(fixture.root / "renamed.txt"),
          "The renamed physical file should exist");
-  std::unique_ptr<std::string> renamed(fileSystem.Search("renamed.txt", 0));
-  expect(renamed != nullptr,
+  std::optional<std::string> renamed(
+      fileSystem.Search("renamed.txt", TipoItem::Ficheiro));
+  expect(renamed,
          "The renamed file should be represented in the in-memory tree");
-  expect(fileSystem.Search("small.txt", 0) == nullptr,
+  expect(!fileSystem.Search("small.txt", TipoItem::Ficheiro),
          "The old filename should no longer be represented in memory");
 }
 
@@ -709,8 +732,9 @@ void testRenameRejectsInvalidNamesAndCollisions() {
     fileSystem.RenomearFicheiros("small.txt", invalidName);
     expect(fs::exists(fixture.root / "small.txt"),
            "An invalid target name must preserve the source file");
-    std::unique_ptr<std::string> preserved(fileSystem.Search("small.txt", 0));
-    expect(preserved != nullptr,
+    std::optional<std::string> preserved(
+        fileSystem.Search("small.txt", TipoItem::Ficheiro));
+    expect(preserved,
            "An invalid target name must preserve the in-memory item");
   }
 
@@ -785,9 +809,11 @@ void testXmlRenameRejectsPortableCollision() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Ler_XML(xmlPath.string()), "Valid virtual tree failed");
   fileSystem.RenomearFicheiros("a.txt", "B.TXT");
-  std::unique_ptr<std::string> first(fileSystem.Search("a.txt", 0));
-  std::unique_ptr<std::string> second(fileSystem.Search("b.txt", 0));
-  expect(first != nullptr && second != nullptr,
+  std::optional<std::string> first(
+      fileSystem.Search("a.txt", TipoItem::Ficheiro));
+  std::optional<std::string> second(
+      fileSystem.Search("b.txt", TipoItem::Ficheiro));
+  expect(first && second,
          "A portable case-insensitive collision must preserve both items");
   expect(fileSystem.ContarFicheiros() == 2,
          "A rejected virtual rename must preserve the tree");
@@ -803,7 +829,7 @@ void testRecursiveDirectoryRemoval() {
 
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
-  expect(fileSystem.RemoverAll("documents", "DIR"),
+  expect(fileSystem.RemoverAll("documents", TipoItem::Diretoria),
          "An existing directory subtree should be removed");
   expect(!fs::exists(fixture.root / "documents"),
          "Recursive removal should update the physical file system");
@@ -820,7 +846,8 @@ void testRootDirectoryCannotBeRemoved() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
 
-  expect(!fileSystem.RemoverAll(fixture.root.filename().string(), "DIR"),
+  expect(!fileSystem.RemoverAll(fixture.root.filename().string(),
+                                TipoItem::Diretoria),
          "The loaded root directory must not be removable");
   expect(fs::exists(fixture.root),
          "Rejecting root removal should preserve the physical directory");

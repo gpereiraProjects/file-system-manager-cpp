@@ -49,8 +49,7 @@ bool Menu::MenuEstatisticas(SistemaFicheiros &SF) {
       Utils::limparEcra();
       cout << "\n--- FICHEIROS ---\n";
       cout << "Total de ficheiros: " << SF.ContarFicheiros() << endl;
-      if (unique_ptr<string> r =
-              unique_ptr<string>(SF.FicheiroMaior())) {
+      if (optional<string> r = SF.FicheiroMaior()) {
         cout << "Ficheiro maior: " << *r << endl;
       } else
         cout << "Nenhum ficheiro encontrado.\n";
@@ -62,15 +61,15 @@ bool Menu::MenuEstatisticas(SistemaFicheiros &SF) {
       Utils::limparEcra();
       cout << "\n--- DIRECTORIAS ---\n";
       cout << "Total de directorias: " << SF.ContarDirectorias() << endl;
-      unique_ptr<string> r(SF.DirectoriaMaisElementos());
+      optional<string> r = SF.DirectoriaMaisElementos();
       if (r) {
         cout << "Mais elementos: " << *r << endl;
       }
-      r.reset(SF.DirectoriaMenosElementos());
+      r = SF.DirectoriaMenosElementos();
       if (r) {
         cout << "Menos elementos: " << *r << endl;
       }
-      r.reset(SF.DirectoriaMaisEspaco());
+      r = SF.DirectoriaMaisEspaco();
       if (r) {
         cout << "Mais espaço: " << *r << endl;
       }
@@ -119,14 +118,17 @@ bool Menu::MenuPesquisas(SistemaFicheiros &SF) {
       if (!LerTexto(nome))
         return false;
 
-      cout << "Tipo (0 = ficheiro, 1 = diretoria): ";
+      cout << "Tipo (1 = ficheiro, 2 = diretoria): ";
       int tipoOp = 0;
       const InputStatus tipoStatus = LerInteiro(tipoOp);
       if (tipoStatus == InputStatus::EndOfInput)
         return false;
       if (tipoStatus == InputStatus::Success &&
-          (tipoOp == 0 || tipoOp == 1)) {
-        unique_ptr<string> r(SF.Search(nome, tipoOp));
+          (tipoOp == 1 || tipoOp == 2)) {
+        const SistemaFicheiros::TipoItem tipo =
+            tipoOp == 1 ? SistemaFicheiros::TipoItem::Ficheiro
+                        : SistemaFicheiros::TipoItem::Diretoria;
+        optional<string> r = SF.Search(nome, tipo);
         if (r) {
           cout << "Encontrado: " << *r << endl;
         } else {
@@ -145,7 +147,7 @@ bool Menu::MenuPesquisas(SistemaFicheiros &SF) {
       cout << "Nome da diretoria: ";
       if (!LerTexto(nome))
         return false;
-      SF.PesquisarAllDirectorias(lista, nome);
+      lista = SF.PesquisarAllDirectorias(nome);
       Utils::PrintListaString(lista);
       if (lista.empty()) {
         cout << "Nenhuma diretoria encontrada com esse nome.\n";
@@ -159,7 +161,7 @@ bool Menu::MenuPesquisas(SistemaFicheiros &SF) {
       cout << "Nome do ficheiro: ";
       if (!LerTexto(nome))
         return false;
-      SF.PesquisarAllFicheiros(lista, nome);
+      lista = SF.PesquisarAllFicheiros(nome);
       Utils::PrintListaString(lista);
       if (lista.empty()) {
         cout << "Nenhum ficheiro encontrado com esse nome.\n";
@@ -353,8 +355,7 @@ bool Menu::MenuAvancado(SistemaFicheiros &SF) {
       cout << "Caminho do ficheiro: ";
       if (!LerTexto(nome))
         return false;
-      if (unique_ptr<string> d =
-              unique_ptr<string>(SF.DataFicheiro(nome))) {
+      if (optional<string> d = SF.DataFicheiro(nome)) {
         cout << "Data: " << *d << endl;
       } else
         cout << "Ficheiro não encontrado.\n";
@@ -389,13 +390,15 @@ bool Menu::MenuAvancado(SistemaFicheiros &SF) {
         return false;
 
       int opTipo = 0;
-      cout << "Tipo (0: DIR / 1: FICH): ";
+      cout << "Tipo (1 = ficheiro, 2 = diretoria): ";
       const InputStatus tipoStatus = LerInteiro(opTipo);
       if (tipoStatus == InputStatus::EndOfInput)
         return false;
       if (tipoStatus == InputStatus::Success &&
-          (opTipo == 0 || opTipo == 1)) {
-        string tipo = (opTipo == 0) ? "DIR" : "FICH";
+          (opTipo == 1 || opTipo == 2)) {
+        const SistemaFicheiros::TipoItem tipo =
+            opTipo == 1 ? SistemaFicheiros::TipoItem::Ficheiro
+                        : SistemaFicheiros::TipoItem::Diretoria;
         cout << (SF.RemoverAll(nome, tipo) ? "Remoção concluída.\n"
                                            : "Erro na remoção.\n");
       } else {

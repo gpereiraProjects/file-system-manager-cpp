@@ -353,8 +353,7 @@ void SistemaFicheiros::diretoriaMaisEspaco(Diretoria *dir, uintmax_t &tamMax,
  * - lres (list<string>&): Referência para a lista onde serão armazenados os
  * caminhos dos itens encontrados.
  * - n (const string&): Nome do item a ser pesquisado.
- * - procFich (bool): Indica se deve procurar ficheiros (true) ou diretorias
- * (false).
+ * - tipo: Tipo de item a procurar.
  *
  * Retorno:
  * - void (Não retorna valor, os resultados são armazenados em 'lres').
@@ -362,16 +361,17 @@ void SistemaFicheiros::diretoriaMaisEspaco(Diretoria *dir, uintmax_t &tamMax,
 void SistemaFicheiros::pesquisarItensComNomeIgualRec(Diretoria *dir,
                                                      list<string> &lres,
                                                      const string &n,
-                                                     bool procFich) {
-  if (dir->getNome() == n && !procFich)
+                                                     TipoItem tipo) {
+  const bool procurarFicheiros = tipo == TipoItem::Ficheiro;
+  if (dir->getNome() == n && !procurarFicheiros)
     lres.push_back(dir->getCaminho());
 
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
       Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
       if (subdir)
-        pesquisarItensComNomeIgualRec(subdir, lres, n, procFich);
-    } else if (item->getNome() == n && procFich) {
+        pesquisarItensComNomeIgualRec(subdir, lres, n, tipo);
+    } else if (item->getNome() == n && procurarFicheiros) {
       lres.push_back(item->getCaminho());
     }
   }
@@ -387,9 +387,8 @@ void SistemaFicheiros::pesquisarItensComNomeIgualRec(Diretoria *dir,
  * - dir (Diretoria*): Ponteiro para a diretoria raiz onde a remoção deve
  * começar.
  * - s (const string&): Nome do item a ser removido.
- * - tipo (const string&): Tipo do item a ser removido ("DIR" para diretorias,
- * outro valor para ficheiros).
- * - fs (bool): Indica se o item deve ser removido do sistema de ficheiros.
+ * - tipo: Tipo de item a remover.
+ * - removerNoDisco: Indica se o item deve ser removido do sistema de ficheiros.
  * - importacao_diretoria (bool): Indica se a estrutura foi carregada a partir
  * de uma diretoria (true) ou de um XML (false).
  *
@@ -397,14 +396,14 @@ void SistemaFicheiros::pesquisarItensComNomeIgualRec(Diretoria *dir,
  * - bool: Verdadeiro se pelo menos um item foi removido, falso caso contrário.
  */
 bool SistemaFicheiros::RemovePorNome(Diretoria *dir, const string &s,
-                                     const string &tipo, bool fs,
+                                     TipoItem tipo, bool removerNoDisco,
                                      bool operarNoDisco) {
-  bool t = (tipo == "DIR") ? false : true;
+  const bool removerFicheiros = tipo == TipoItem::Ficheiro;
 
   list<string> lres;
-  pesquisarItensComNomeIgualRec(dir, lres, s, t);
+  pesquisarItensComNomeIgualRec(dir, lres, s, tipo);
 
-  if (!t) {
+  if (!removerFicheiros) {
     const string caminhoRaiz = Utils::NormalizarCaminho(dir->getCaminho());
     lres.remove_if([&caminhoRaiz](const string &caminho) {
       return Utils::NormalizarCaminho(caminho) == caminhoRaiz;
@@ -417,17 +416,17 @@ bool SistemaFicheiros::RemovePorNome(Diretoria *dir, const string &s,
     return false;
   }
 
-  if (!t)
+  if (!removerFicheiros)
     lres.sort([](const string &left, const string &right) {
       return fs::path(left).lexically_normal().native().size() >
              fs::path(right).lexically_normal().native().size();
     });
 
   for (const string &caminho : lres) {
-    if (fs && operarNoDisco) {
+    if (removerNoDisco && operarNoDisco) {
       error_code error;
       bool removidoNoDisco = false;
-      if (t)
+      if (removerFicheiros)
         removidoNoDisco = fs::remove(fs::path(caminho), error);
       else
         removidoNoDisco = fs::remove_all(fs::path(caminho), error) > 0;
@@ -522,16 +521,13 @@ void SistemaFicheiros::escreverXMLRec(Diretoria *dir, XML *XML) {
 /**
  * Resumo:
  * Procura recursivamente um item (ficheiro ou diretoria) com o nome
- * especificado dentro da diretoria fornecida. Dependendo do parâmetro
- * 'procurarDiretorias', a busca é feita apenas em diretorias ou apenas em
- * ficheiros.
+ * especificado dentro da diretoria fornecida e do tipo pedido.
  *
  * Parâmetros:
  * - dir (Diretoria*): Ponteiro para a diretoria onde a busca inicia.
  * - nomeProcurado (const string&): O nome do ficheiro ou pasta que se pretende
  * encontrar.
- * - procurarDiretorias (bool): Indica se a busca deve ser feita em diretorias
- * (true) ou em ficheiros (false).
+ * - tipo: Tipo de item a procurar.
  *
  * Retorno:
  * - Item*: Ponteiro para o item encontrado (ficheiro ou diretoria), ou nullptr
@@ -539,20 +535,22 @@ void SistemaFicheiros::escreverXMLRec(Diretoria *dir, XML *XML) {
  */
 Item *SistemaFicheiros::procurarItemRec(Diretoria *dir,
                                         const string &nomeProcurado,
-                                        bool procurarDiretorias) {
+                                        TipoItem tipo) {
   if (!dir)
     return nullptr;
 
   for (const auto &item : dir->getConteudo()) {
     // 1. Verifica se é o que procuramos
-    if ((!item->getIsFicheiro() == procurarDiretorias) &&
-        (item->getNome() == nomeProcurado)) {
+    const bool tipoCorreto =
+        tipo == TipoItem::Ficheiro ? item->getIsFicheiro()
+                                   : !item->getIsFicheiro();
+    if (tipoCorreto && item->getNome() == nomeProcurado) {
       return item.get();
     }
 
     if (!item->getIsFicheiro()) {
       Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
-      Item *res = procurarItemRec(subdir, nomeProcurado, procurarDiretorias);
+      Item *res = procurarItemRec(subdir, nomeProcurado, tipo);
       if (res)
         return res;
     }
@@ -967,15 +965,14 @@ int SistemaFicheiros::Memoria() {
  * - Nenhum (utiliza o membro interno 'raiz').
  *
  * Retorno:
- * - string*: Ponteiro para o nome da diretoria com mais elementos. Retorna
- * nullptr se o sistema não tiver sido carregado (raiz nula).
+ * - optional<string>: Nome da diretoria, ou vazio se não existir árvore.
  */
-string *SistemaFicheiros::DirectoriaMaisElementos() {
+optional<string> SistemaFicheiros::DirectoriaMaisElementos() {
   if (!raiz)
-    return nullptr;
+    return nullopt;
 
   size_t maior = 0;
-  return new string(maiorDiretoriaRec(raiz.get(), maior));
+  return maiorDiretoriaRec(raiz.get(), maior);
 }
 
 /**
@@ -988,15 +985,14 @@ string *SistemaFicheiros::DirectoriaMaisElementos() {
  * - Nenhum (utiliza o membro interno 'raiz').
  *
  * Retorno:
- * - string*: Ponteiro para o nome da diretoria com menos elementos. Retorna
- * nullptr se o sistema não tiver sido carregado (raiz nula).
+ * - optional<string>: Nome da diretoria, ou vazio se não existir árvore.
  */
-string *SistemaFicheiros::DirectoriaMenosElementos() {
+optional<string> SistemaFicheiros::DirectoriaMenosElementos() {
   if (!raiz)
-    return nullptr;
+    return nullopt;
 
   size_t menor = 0;
-  return new string(menorDiretoriaRec(raiz.get(), menor));
+  return menorDiretoriaRec(raiz.get(), menor);
 }
 
 /**
@@ -1008,18 +1004,19 @@ string *SistemaFicheiros::DirectoriaMenosElementos() {
  * - Nenhum (utiliza o membro interno 'raiz').
  *
  * Retorno:
- * - string*: Ponteiro para o nome do ficheiro com maior tamanho. Retorna
- * nullptr se o sistema não tiver sido carregado (raiz nula).
+ * - optional<string>: Caminho do ficheiro, ou vazio se não existir ficheiro.
  */
-string *SistemaFicheiros::FicheiroMaior() {
+optional<string> SistemaFicheiros::FicheiroMaior() {
   if (raiz == nullptr)
-    return nullptr;
+    return nullopt;
 
   uintmax_t tamMax = 0;
 
   string strMax;
   ficheiroMaiorRec(raiz.get(), tamMax, strMax);
-  return new string(move(strMax));
+  if (strMax.empty())
+    return nullopt;
+  return strMax;
 }
 
 /**
@@ -1031,18 +1028,19 @@ string *SistemaFicheiros::FicheiroMaior() {
  * - Nenhum (utiliza o membro interno 'raiz').
  *
  * Retorno:
- * - string*: Ponteiro para o nome da diretoria com mais espaço ocupado. Retorna
- * nullptr se o sistema não tiver sido carregado (raiz nula).
+ * - optional<string>: Caminho da diretoria, ou vazio se não houver resultado.
  */
-string *SistemaFicheiros::DirectoriaMaisEspaco() {
+optional<string> SistemaFicheiros::DirectoriaMaisEspaco() {
   if (raiz == nullptr)
-    return nullptr;
+    return nullopt;
 
   uintmax_t tamMax = 0;
 
   string strMax;
   diretoriaMaisEspaco(raiz.get(), tamMax, strMax);
-  return new string(move(strMax));
+  if (strMax.empty())
+    return nullopt;
+  return strMax;
 }
 
 /**
@@ -1052,23 +1050,24 @@ string *SistemaFicheiros::DirectoriaMaisEspaco() {
  *
  * Parâmetros:
  * - const string &s: Caminho a resolver.
- * - int Tipo: Tipo de item a ser pesquisado (1 para diretoria, 0 para
- * ficheiro).
+ * - tipo: Tipo de item a pesquisar.
  *
  * Retorno:
- * - string*: Ponteiro para o nome do item encontrado. Retorna nullptr se não
- * encontrado ou se o sistema não tiver sido carregado (raiz nula).
+ * - optional<string>: Caminho do item, ou vazio se não for encontrado.
  */
-string *SistemaFicheiros::Search(const string &s, int Tipo) {
+optional<string> SistemaFicheiros::Search(const string &s, TipoItem tipo) {
   if (!raiz)
-    return nullptr;
+    return nullopt;
 
   Item *item = resolverCaminho(s);
-  if (!item || (Tipo != 0 && Tipo != 1))
-    return nullptr;
-  if ((Tipo == 0) != item->getIsFicheiro())
-    return nullptr;
-  return new string(item->getCaminho());
+  if (!item)
+    return nullopt;
+  const bool tipoCorreto = tipo == TipoItem::Ficheiro
+                               ? item->getIsFicheiro()
+                               : !item->getIsFicheiro();
+  if (!tipoCorreto)
+    return nullopt;
+  return item->getCaminho();
 }
 
 /**
@@ -1081,14 +1080,13 @@ string *SistemaFicheiros::Search(const string &s, int Tipo) {
  *
  * Parâmetros:
  * - s (const string&): O nome do ficheiro ou diretoria que se pretende remover.
- * - tipo (const string&): O tipo de item a filtrar na remoção (ex: "ficheiro",
- * "diretoria").
+ * - tipo: O tipo de item a remover.
  *
  * Retorno:
  * - bool: Retorna 'true' se a operação de remoção foi bem-sucedida (ou se itens
  * foram encontrados e removidos), ou 'false' caso contrário.
  */
-bool SistemaFicheiros::RemoverAll(const string &s, const string &tipo) {
+bool SistemaFicheiros::RemoverAll(const string &s, TipoItem tipo) {
   if (!raiz)
     return false;
   const bool removido =
@@ -1410,18 +1408,16 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
  * - ficheiro (const string&): Caminho absoluto ou relativo à raiz.
  *
  * Retorno:
- * - string*: Ponteiro para a string contendo a data do ficheiro.
- * Retorna nullptr (dependendo da implementação interna) se o ficheiro não for
- * encontrado.
+ * - optional<string>: Data do ficheiro, ou vazio se não for encontrado.
  */
-string *SistemaFicheiros::DataFicheiro(const string &ficheiro) {
+optional<string> SistemaFicheiros::DataFicheiro(const string &ficheiro) {
   if (!raiz)
-    return nullptr;
+    return nullopt;
 
   auto *item = dynamic_cast<Ficheiro *>(resolverCaminho(ficheiro));
   if (!item)
-    return nullptr;
-  return new string(item->getDataModificacao());
+    return nullopt;
+  return item->getDataModificacao();
 }
 
 /**
@@ -1433,25 +1429,22 @@ string *SistemaFicheiros::DataFicheiro(const string &ficheiro) {
  * estado atual da hierarquia.
  *
  * Parâmetros:
- * - fich (const string*): Ponteiro para a string que contém o nome (ou caminho)
- * do ficheiro de texto onde a árvore será gravada.
+ * - ficheiro: Nome ou caminho do ficheiro onde a árvore será gravada.
  *
  * Retorno:
  * - void (Não retorna valor).
  */
-void SistemaFicheiros::Tree(const string *fich) {
+void SistemaFicheiros::Tree(const string &ficheiro) {
   if (!raiz)
     return;
 
-  const string ficheiroPadrao = "tree.txt";
-  const string &destino = fich ? *fich : ficheiroPadrao;
   size_t nivel = 0;
 
   ShowRec(raiz.get(), nivel, cout);
 
   nivel = 0;
 
-  ofstream f(destino);
+  ofstream f(ficheiro);
 
   ShowRec(raiz.get(), nivel, f);
 
@@ -1472,15 +1465,15 @@ void SistemaFicheiros::Tree(const string *fich) {
  * - dir (const string&): O nome da diretoria que se pretende pesquisar.
  *
  * Retorno:
- * - void (Não retorna valor; os resultados são acumulados na lista passada por
- * referência).
+ * - list<string>: Caminhos de todas as diretorias encontradas.
  */
-void SistemaFicheiros::PesquisarAllDirectorias(list<string> &lres,
-                                               const string &dir) {
-  lres.clear(); // limpa potenciais resultados antigos que possam estar na lista
+list<string> SistemaFicheiros::PesquisarAllDirectorias(const string &dir) {
+  list<string> resultados;
   if (!raiz)
-    return;
-  pesquisarItensComNomeIgualRec(raiz.get(), lres, dir, false);
+    return resultados;
+  pesquisarItensComNomeIgualRec(raiz.get(), resultados, dir,
+                                 TipoItem::Diretoria);
+  return resultados;
 }
 
 /**
@@ -1498,15 +1491,15 @@ void SistemaFicheiros::PesquisarAllDirectorias(list<string> &lres,
  * - file (const string&): O nome do ficheiro que se pretende pesquisar.
  *
  * Retorno:
- * - void (Não retorna valor; os resultados são acumulados na lista passada por
- * referência).
+ * - list<string>: Caminhos de todos os ficheiros encontrados.
  */
-void SistemaFicheiros::PesquisarAllFicheiros(list<string> &lres,
-                                             const string &file) {
-  lres.clear(); // limpa potenciais resultados antigos que possam estar na lista
+list<string> SistemaFicheiros::PesquisarAllFicheiros(const string &file) {
+  list<string> resultados;
   if (!raiz)
-    return;
-  pesquisarItensComNomeIgualRec(raiz.get(), lres, file, true);
+    return resultados;
+  pesquisarItensComNomeIgualRec(raiz.get(), resultados, file,
+                                 TipoItem::Ficheiro);
+  return resultados;
 }
 
 /**
@@ -1701,7 +1694,8 @@ bool SistemaFicheiros::CopyBatch(const string &padrao, const string &DirOrigem,
                                  const string &DirDestino) {
   if (!raiz)
     return false;
-  Item *diretoriaOrigem = procurarItemRec(raiz.get(), DirOrigem, true);
+  Item *diretoriaOrigem =
+      procurarItemRec(raiz.get(), DirOrigem, TipoItem::Diretoria);
   if (!diretoriaOrigem) {
     Logger::log(Logger::Level::ERROR_, "Erro: diretoria de origem '" +
                                            DirOrigem + "' não encontrada.");
@@ -1715,7 +1709,8 @@ bool SistemaFicheiros::CopyBatch(const string &padrao, const string &DirOrigem,
     return false;
   }
 
-  Item *diretoriaDestino = procurarItemRec(raiz.get(), DirDestino, true);
+  Item *diretoriaDestino =
+      procurarItemRec(raiz.get(), DirDestino, TipoItem::Diretoria);
   if (!diretoriaDestino) {
     Logger::log(Logger::Level::ERROR_, "Erro: diretoria de destino '" +
                                            DirDestino + "' não encontrada.");

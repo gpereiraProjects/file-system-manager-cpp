@@ -8,6 +8,8 @@ class XML; // declaração antecipada
 
 class SistemaFicheiros {
 public:
+  enum class TipoItem { Ficheiro, Diretoria };
+
   SistemaFicheiros();
   virtual ~SistemaFicheiros() = default;
 
@@ -20,23 +22,21 @@ public:
   int ContarFicheiros();
   int ContarDirectorias();
   int Memoria();
-  std::string *DirectoriaMaisElementos();
-  std::string *DirectoriaMenosElementos();
-  std::string *FicheiroMaior();
-  std::string *DirectoriaMaisEspaco();
-  std::string *Search(const std::string &s, int Tipo);
-  bool RemoverAll(const std::string &s, const std::string &tipo);
+  std::optional<std::string> DirectoriaMaisElementos();
+  std::optional<std::string> DirectoriaMenosElementos();
+  std::optional<std::string> FicheiroMaior();
+  std::optional<std::string> DirectoriaMaisEspaco();
+  std::optional<std::string> Search(const std::string &s, TipoItem tipo);
+  bool RemoverAll(const std::string &s, TipoItem tipo);
   bool Escrever_XML(const std::string &s);
   bool Ler_XML(const std::string &s);
   bool MoveFicheiro(const std::string &Fich, const std::string &DirNova);
   bool MoverDirectoria(const std::string &DirOld,
                        const std::string &DirNew);
-  std::string *DataFicheiro(const std::string &ficheiro);
-  void Tree(const std::string *fich = nullptr);
-  void PesquisarAllDirectorias(std::list<std::string> &lres,
-                               const std::string &dir);
-  void PesquisarAllFicheiros(std::list<std::string> &lres,
-                             const std::string &file);
+  std::optional<std::string> DataFicheiro(const std::string &ficheiro);
+  void Tree(const std::string &ficheiro = "tree.txt");
+  std::list<std::string> PesquisarAllDirectorias(const std::string &dir);
+  std::list<std::string> PesquisarAllFicheiros(const std::string &file);
   void RenomearFicheiros(const std::string &fich_old,
                          const std::string &fich_new);
   bool FicheiroDuplicados();
@@ -68,18 +68,17 @@ private:
   Item *resolverCaminho(const std::string &caminho);
   void pesquisarItensComNomeIgualRec(
       Diretoria *dir, std::list<std::string> &lres, const std::string &n,
-      bool procFich); // utilizada no RemoverAll, PesquisarAllFicheiros,
+      TipoItem tipo); // utilizada no RemoverAll, PesquisarAllFicheiros,
                       // PesquisarAllDirectorias
-  bool RemovePorNome(Diretoria *dir, const std::string &s,
-                     const std::string &tipo,
-                     bool fs,
+  bool RemovePorNome(Diretoria *dir, const std::string &s, TipoItem tipo,
+                     bool removerNoDisco,
                      bool operarNoDisco); // utilizada no RemoverAll
   bool removerPorCaminho(Diretoria *dir,
                          const std::string &caminho); // utilizada no RemoverAll
   void escreverXMLRec(Diretoria *dir, XML *XML); // utilizada no Escrever_XML
   Item *procurarItemRec(
       Diretoria *dir, const std::string &nomeProcurado,
-      bool procurarDiretorias); // utilizada no CopyBatch
+      TipoItem tipo); // utilizada no CopyBatch
   Diretoria *procurarDiretoriaPai(Diretoria *dir, const Item *item);
   bool contemDiretoria(Diretoria *origem, const Diretoria *procurada);
   void setCaminhoRec(Diretoria *dir,
