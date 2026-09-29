@@ -54,17 +54,29 @@ static_assert(std::is_same_v<
               decltype(std::declval<const SistemaFicheiros &>().Memoria()),
               std::uintmax_t>,
               "Byte totals must use std::uintmax_t");
+static_assert(std::is_same_v<
+              decltype(std::declval<const SistemaFicheiros &>().Tree()),
+              std::string>,
+              "Tree rendering must return text to the presentation layer");
+static_assert(std::is_same_v<
+              decltype(std::declval<SistemaFicheiros>().RenomearFicheiros(
+                  std::declval<const std::string &>(),
+                  std::declval<const std::string &>())),
+              SistemaFicheiros::ResultadoRenomeacao>,
+              "Rename operations must return a structured result");
 
 namespace {
 
 namespace fs = std::filesystem;
 using TipoItem = SistemaFicheiros::TipoItem;
+using EstadoRenomeacao = SistemaFicheiros::EstadoRenomeacao;
 
 class ScopedConsoleInput {
 public:
   explicit ScopedConsoleInput(const std::string &contents) : input(contents) {
     previousInput = std::cin.rdbuf(input.rdbuf());
     previousOutput = std::cout.rdbuf(output.rdbuf());
+    previousError = std::cerr.rdbuf(error.rdbuf());
     std::cin.clear();
     std::cout.clear();
   }
@@ -72,6 +84,7 @@ public:
   ~ScopedConsoleInput() {
     std::cin.rdbuf(previousInput);
     std::cout.rdbuf(previousOutput);
+    std::cerr.rdbuf(previousError);
     std::cin.clear();
     std::cout.clear();
   }
@@ -80,12 +93,15 @@ public:
   ScopedConsoleInput &operator=(const ScopedConsoleInput &) = delete;
 
   std::string capturedOutput() const { return output.str(); }
+  std::string capturedError() const { return error.str(); }
 
 private:
   std::istringstream input;
   std::ostringstream output;
+  std::ostringstream error;
   std::streambuf *previousInput = nullptr;
   std::streambuf *previousOutput = nullptr;
+  std::streambuf *previousError = nullptr;
 };
 
 class TemporaryFixture {
@@ -285,6 +301,30 @@ void testMenuInputAndEndOfFileHandling() {
   }
 }
 
+void testDomainOperationsDoNotWriteToConsole() {
+  TemporaryFixture fixture;
+  ScopedConsoleInput console("");
+  SistemaFicheiros fileSystem;
+
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+  expect(fileSystem.MoveFicheiro("small.txt", "documents"),
+         "Domain move failed");
+  const auto rename =
+      fileSystem.RenomearFicheiros("small.txt", "renamed.txt");
+  expect(rename.estado == EstadoRenomeacao::Sucesso,
+         "Domain rename failed");
+  expect(fileSystem.RemoverAll("renamed.txt", TipoItem::Ficheiro),
+         "Domain removal failed");
+  expect(!fileSystem.Tree().empty(), "Domain tree rendering failed");
+  expect(!fileSystem.Load((fixture.root / "missing").string()),
+         "Invalid load should fail");
+
+  expect(console.capturedOutput().empty(),
+         "Domain operations must not write to standard output");
+  expect(console.capturedError().empty(),
+         "Domain operations must not write to standard error");
+}
+
 void testInvalidDirectoryIsRejected() {
   TemporaryFixture fixture;
   SistemaFicheiros fileSystem;
@@ -444,7 +484,12 @@ void testTreeOutput() {
 
   const fs::path treePath = fixture.root / "tree-output.txt";
   const std::string treePathString = treePath.string();
-  fileSystem.Tree(treePathString);
+  const std::string renderedTree = fileSystem.Tree();
+  expect(renderedTree.find("<D>") != std::string::npos &&
+             renderedTree.find("<F> largest.bin") != std::string::npos,
+         "Tree should return its complete textual representation");
+  expect(fileSystem.EscreverArvore(treePathString),
+         "Tree export should report success");
 
   std::ifstream input(treePath);
   const std::string tree((std::istreambuf_iterator<char>(input)),
@@ -720,7 +765,11 @@ void testRenameKeepsDiskAndMemoryConsistent() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
 
-  fileSystem.RenomearFicheiros("small.txt", "renamed.txt");
+  const auto result =
+      fileSystem.RenomearFicheiros("small.txt", "renamed.txt");
+  expect(result.estado == EstadoRenomeacao::Sucesso &&
+             result.quantidade == std::size_t{1},
+         "A successful rename should return its affected-item count");
   expect(!fs::exists(fixture.root / "small.txt"),
          "The original physical filename should no longer exist");
   expect(fs::exists(fixture.root / "renamed.txt"),
@@ -738,7 +787,10 @@ void testRenameUpdatesExtensionMetadata() {
   SistemaFicheiros fileSystem;
   expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
 
-  fileSystem.RenomearFicheiros("small.txt", "renamed.bin");
+  const auto result =
+      fileSystem.RenomearFicheiros("small.txt", "renamed.bin");
+  expect(result.estado == EstadoRenomeacao::Sucesso,
+         "A valid extension-changing rename should succeed");
   expect(fs::exists(fixture.root / "renamed.bin"),
          "Renaming to a different extension should update the disk");
 
@@ -772,7 +824,10 @@ void testRenameRejectsInvalidNamesAndCollisions() {
       (fixture.root / "absolute.txt").string()};
 
   for (const std::string &invalidName : invalidNames) {
-    fileSystem.RenomearFicheiros("small.txt", invalidName);
+    const auto result =
+        fileSystem.RenomearFicheiros("small.txt", invalidName);
+    expect(result.estado == EstadoRenomeacao::NomeInvalido,
+           "Invalid names should return a typed failure");
     expect(fs::exists(fixture.root / "small.txt"),
            "An invalid target name must preserve the source file");
     std::optional<std::string> preserved(
@@ -781,7 +836,10 @@ void testRenameRejectsInvalidNamesAndCollisions() {
            "An invalid target name must preserve the in-memory item");
   }
 
-  fileSystem.RenomearFicheiros("small.txt", "renamed.txt");
+  const auto collisionResult =
+      fileSystem.RenomearFicheiros("small.txt", "renamed.txt");
+  expect(collisionResult.estado == EstadoRenomeacao::Colisao,
+         "An existing destination should return a collision result");
   expect(fs::exists(fixture.root / "small.txt"),
          "A destination collision must preserve the source file");
   expect(fs::exists(fixture.root / "renamed.txt"),
@@ -806,7 +864,10 @@ void testBatchRenameIsAllOrNothing() {
 
     SistemaFicheiros fileSystem;
     expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
-    fileSystem.RenomearFicheiros("same.txt", "target.txt");
+    const auto result =
+        fileSystem.RenomearFicheiros("same.txt", "target.txt");
+    expect(result.estado == EstadoRenomeacao::Colisao,
+           "A batch collision should be reported explicitly");
     expect(fs::exists(fixture.root / "same.txt") &&
                fs::exists(fixture.root / "documents" / "same.txt"),
            "A collision in one directory must cancel the complete batch");
@@ -826,7 +887,11 @@ void testBatchRenameIsAllOrNothing() {
 
     SistemaFicheiros fileSystem;
     expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
-    fileSystem.RenomearFicheiros("same.txt", "renamed.dat");
+    const auto result =
+        fileSystem.RenomearFicheiros("same.txt", "renamed.dat");
+    expect(result.estado == EstadoRenomeacao::Sucesso &&
+               result.quantidade == std::size_t{2},
+           "A successful batch should report every renamed file");
     expect(fs::exists(fixture.root / "renamed.dat") &&
                fs::exists(fixture.root / "documents" / "renamed.dat"),
            "Every non-conflicting match should be renamed");
@@ -851,7 +916,9 @@ void testXmlRenameRejectsPortableCollision() {
 
   SistemaFicheiros fileSystem;
   expect(fileSystem.Ler_XML(xmlPath.string()), "Valid virtual tree failed");
-  fileSystem.RenomearFicheiros("a.txt", "B.TXT");
+  const auto result = fileSystem.RenomearFicheiros("a.txt", "B.TXT");
+  expect(result.estado == EstadoRenomeacao::Colisao,
+         "A virtual collision should be reported explicitly");
   std::optional<std::string> first(
       fileSystem.Search("a.txt", TipoItem::Ficheiro));
   std::optional<std::string> second(
@@ -910,6 +977,7 @@ int main() {
       {"const queries and wide sizes", testConstQueriesPreserveWideSizes},
       {"portable path normalization", testPortablePathNormalization},
       {"menu input and EOF", testMenuInputAndEndOfFileHandling},
+      {"silent domain operations", testDomainOperationsDoNotWriteToConsole},
       {"invalid directory", testInvalidDirectoryIsRejected},
       {"symbolic-link cycle", testSymbolicLinkCyclesAreIgnored},
       {"search and largest file", testSearchAndLargestFile},

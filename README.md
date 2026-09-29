@@ -101,6 +101,9 @@ The domain model is intentionally separated from the console interface:
   directives into consumers;
 - count queries use `std::size_t`, byte totals use `std::uintmax_t`, and
   read-only operations are callable through `const SistemaFicheiros&`;
+- domain operations never write to the console: tree rendering returns text,
+  renaming returns a typed result, and the menu translates results into
+  user-facing messages;
 - the reusable core library contains the domain and persistence code, while
   `Menu.cpp` is compiled only into the console executable.
 

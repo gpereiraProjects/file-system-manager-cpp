@@ -413,8 +413,6 @@ bool SistemaFicheiros::RemovePorNome(Diretoria *dir, const string &s,
     });
   }
 
-  Utils::PrintListaString(lres);
-
   if (lres.empty()) {
     return false;
   }
@@ -881,7 +879,7 @@ bool SistemaFicheiros::Load(const string &path) {
   error_code error;
   const fs::path caminho = fs::weakly_canonical(fs::path(path), error);
   if (error || !fs::is_directory(caminho, error) || error) {
-    cerr << "Erro: caminho inválido -> " << path << endl;
+    Logger::log(Logger::Level::ERROR_, "Caminho inválido: " + path);
     return false;
   }
 
@@ -1302,9 +1300,6 @@ bool SistemaFicheiros::MoveFicheiro(const string &Fich, const string &DirNova) {
   itemMovidoPtr->setCaminho(novoCaminho.string());
   raiz->recalcularTamanho();
 
-  cout << "Ficheiro '" << Fich << "' movido com sucesso para '" << DirNova
-       << "'.\n";
-
   return true;
 }
 
@@ -1402,7 +1397,6 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
   setCaminhoRec(diretoriaMovidaPtr, novoCaminhoString);
   raiz->recalcularTamanho();
 
-  cout << "Diretoria '" << DirOld << "' movida com sucesso!\n";
   return true;
 }
 
@@ -1429,33 +1423,26 @@ optional<string> SistemaFicheiros::DataFicheiro(const string &ficheiro) const {
 
 /**
  * Resumo:
- * Gera e exibe a representação visual (estrutura em árvore) de todo o sistema
- * de ficheiros. A função realiza a operação em duas etapas: primeiro imprime a
- * árvore na consola (std::cout) para visualização imediata e, em seguida, grava
- * a mesma estrutura num ficheiro de texto especificado, permitindo guardar o
- * estado atual da hierarquia.
- *
- * Parâmetros:
- * - ficheiro: Nome ou caminho do ficheiro onde a árvore será gravada.
- *
- * Retorno:
- * - void (Não retorna valor).
+ * Devolve a representação textual da árvore sem produzir saída de consola.
  */
-void SistemaFicheiros::Tree(const string &ficheiro) const {
+string SistemaFicheiros::Tree() const {
   if (!raiz)
-    return;
+    return {};
 
   size_t nivel = 0;
+  ostringstream output;
+  ShowRec(raiz.get(), nivel, output);
+  return output.str();
+}
 
-  ShowRec(raiz.get(), nivel, cout);
-
-  nivel = 0;
-
+bool SistemaFicheiros::EscreverArvore(const string &ficheiro) const {
+  if (!raiz)
+    return false;
   ofstream f(ficheiro);
-
-  ShowRec(raiz.get(), nivel, f);
-
-  f.close();
+  if (!f)
+    return false;
+  f << Tree();
+  return static_cast<bool>(f);
 }
 
 /**
@@ -1522,26 +1509,24 @@ list<string> SistemaFicheiros::PesquisarAllFicheiros(const string &file) const {
  * - fich_new (const string&): O novo nome que será atribuído.
  *
  * Retorno:
- * - void (Não retorna valor, mas imprime o resultado da operação na consola).
+ * - ResultadoRenomeacao: Estado final e quantidade de ficheiros alterados.
  */
-void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
-                                         const string &fich_new) {
+SistemaFicheiros::ResultadoRenomeacao
+SistemaFicheiros::RenomearFicheiros(const string &fich_old,
+                                    const string &fich_new) {
   if (!raiz) {
     Logger::log(Logger::Level::ERROR_, "Erro: sistema não carregado.");
-    return;
+    return {EstadoRenomeacao::SistemaNaoCarregado, 0};
   }
 
   if (!Utils::nomeItemPortatilValido(fich_new)) {
     Logger::log(Logger::Level::ERROR_,
                 "Erro: o novo nome não é um nome de ficheiro portátil válido.");
-    cout << "Nome de ficheiro inválido.\n";
-    return;
+    return {EstadoRenomeacao::NomeInvalido, 0};
   }
 
-  if (fich_old == fich_new) {
-    cout << "O nome atual e o novo nome são iguais.\n";
-    return;
-  }
+  if (fich_old == fich_new)
+    return {EstadoRenomeacao::SemAlteracoes, 0};
 
   struct RenameTarget {
     Diretoria *parent;
@@ -1572,10 +1557,8 @@ void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
   };
   collectTargets(collectTargets, raiz.get());
 
-  if (targets.empty()) {
-    cout << "Nenhum ficheiro encontrado com o nome '" << fich_old << "'.\n";
-    return;
-  }
+  if (targets.empty())
+    return {EstadoRenomeacao::NaoEncontrado, 0};
 
   for (const RenameTarget &target : targets) {
     const bool modelCollision = any_of(
@@ -1589,8 +1572,7 @@ void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
       Logger::log(Logger::Level::ERROR_,
                   "Erro: o destino já contém um item chamado '" + fich_new +
                       "'.");
-      cout << "Renomeação cancelada: nome já existente.\n";
-      return;
+      return {EstadoRenomeacao::Colisao, 0};
     }
 
     if (importacao_diretoria) {
@@ -1600,8 +1582,7 @@ void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
         Logger::log(Logger::Level::ERROR_,
                     "Erro ao validar o destino da renomeação: " +
                         existsError.message());
-        cout << "Renomeação cancelada: não foi possível validar o destino.\n";
-        return;
+        return {EstadoRenomeacao::ErroSistemaFicheiros, 0};
       }
 
       if (destinationExists) {
@@ -1612,8 +1593,7 @@ void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
           Logger::log(Logger::Level::ERROR_,
                       "Erro: o caminho de destino já existe: " +
                           target.newPath.string());
-          cout << "Renomeação cancelada: destino já existente.\n";
-          return;
+          return {EstadoRenomeacao::Colisao, 0};
         }
       }
     }
@@ -1641,9 +1621,7 @@ void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
           }
         }
 
-        cout << "Renomeação cancelada devido a um erro no sistema de "
-                "ficheiros.\n";
-        return;
+        return {EstadoRenomeacao::ErroSistemaFicheiros, 0};
       }
     }
   }
@@ -1653,8 +1631,7 @@ void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
     target.file->setCaminho(target.newPath.string());
   }
 
-  cout << "Operação concluída. Ficheiros renomeados: " << targets.size()
-       << "\n";
+  return {EstadoRenomeacao::Sucesso, targets.size()};
 }
 
 /**

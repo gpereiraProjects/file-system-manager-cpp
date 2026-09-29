@@ -9,6 +9,20 @@ class XML; // declaração antecipada
 class SistemaFicheiros {
 public:
   enum class TipoItem { Ficheiro, Diretoria };
+  enum class EstadoRenomeacao {
+    Sucesso,
+    SistemaNaoCarregado,
+    NomeInvalido,
+    SemAlteracoes,
+    NaoEncontrado,
+    Colisao,
+    ErroSistemaFicheiros
+  };
+
+  struct ResultadoRenomeacao {
+    EstadoRenomeacao estado;
+    std::size_t quantidade;
+  };
 
   SistemaFicheiros();
   virtual ~SistemaFicheiros() = default;
@@ -36,13 +50,14 @@ public:
                        const std::string &DirNew);
   std::optional<std::string> DataFicheiro(
       const std::string &ficheiro) const;
-  void Tree(const std::string &ficheiro = "tree.txt") const;
+  std::string Tree() const;
+  bool EscreverArvore(const std::string &ficheiro = "tree.txt") const;
   std::list<std::string> PesquisarAllDirectorias(
       const std::string &dir) const;
   std::list<std::string> PesquisarAllFicheiros(
       const std::string &file) const;
-  void RenomearFicheiros(const std::string &fich_old,
-                         const std::string &fich_new);
+  ResultadoRenomeacao RenomearFicheiros(const std::string &fich_old,
+                                        const std::string &fich_new);
   bool FicheiroDuplicados() const;
   bool CopyBatch(const std::string &padrao, const std::string &DirOrigem,
                  const std::string &DirDestino);

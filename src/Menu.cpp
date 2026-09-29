@@ -365,7 +365,9 @@ bool Menu::MenuAvancado(SistemaFicheiros &SF) {
     case 4: // Imprime a árvore de diretórios
       Utils::limparEcra();
       cout << "============TREE=============\n";
-      SF.Tree();
+      cout << SF.Tree();
+      if (!SF.EscreverArvore())
+        cout << "Não foi possível guardar a árvore em tree.txt.\n";
       Utils::esperarEnter();
       break;
 
@@ -537,7 +539,32 @@ bool Menu::ExecutarOpcao(SistemaFicheiros &SF) {
       cout << "Novo nome: ";
       if (!LerTexto(n2))
         return false;
-      SF.RenomearFicheiros(n1, n2);
+      const auto resultado = SF.RenomearFicheiros(n1, n2);
+      switch (resultado.estado) {
+      case SistemaFicheiros::EstadoRenomeacao::Sucesso:
+        cout << "Operação concluída. Ficheiros renomeados: "
+             << resultado.quantidade << "\n";
+        break;
+      case SistemaFicheiros::EstadoRenomeacao::SistemaNaoCarregado:
+        cout << "Sistema de ficheiros não carregado.\n";
+        break;
+      case SistemaFicheiros::EstadoRenomeacao::NomeInvalido:
+        cout << "Nome de ficheiro inválido.\n";
+        break;
+      case SistemaFicheiros::EstadoRenomeacao::SemAlteracoes:
+        cout << "O nome atual e o novo nome são iguais.\n";
+        break;
+      case SistemaFicheiros::EstadoRenomeacao::NaoEncontrado:
+        cout << "Nenhum ficheiro encontrado com esse nome.\n";
+        break;
+      case SistemaFicheiros::EstadoRenomeacao::Colisao:
+        cout << "Renomeação cancelada: destino já existente.\n";
+        break;
+      case SistemaFicheiros::EstadoRenomeacao::ErroSistemaFicheiros:
+        cout << "Renomeação cancelada devido a um erro no sistema de "
+                "ficheiros.\n";
+        break;
+      }
       Utils::esperarEnter();
       break;
     }
