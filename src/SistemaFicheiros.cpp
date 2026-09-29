@@ -7,10 +7,37 @@
 #include <cctype>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 using namespace std;
 namespace fs = std::filesystem;
 
 namespace {
+
+bool linkSimbolicoOuReparsePoint(const fs::directory_entry &entry,
+                                 error_code &error) {
+#ifdef _WIN32
+  const DWORD attributes = GetFileAttributesW(entry.path().c_str());
+  if (attributes == INVALID_FILE_ATTRIBUTES) {
+    error = error_code(static_cast<int>(GetLastError()), system_category());
+    return false;
+  }
+
+  error.clear();
+  return (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+  const fs::file_status linkStatus = entry.symlink_status(error);
+  return !error && fs::is_symlink(linkStatus);
+#endif
+}
 
 string identidadeDiretoria(const fs::path &path) {
   error_code error;
@@ -61,14 +88,16 @@ void SistemaFicheiros::carregarConteudo(
     string caminhoCompleto = entry.path().string();
 
     error_code statusError;
-    const fs::file_status linkStatus = entry.symlink_status(statusError);
+    const bool ignorarLink =
+        linkSimbolicoOuReparsePoint(entry, statusError);
     if (statusError)
       throw fs::filesystem_error("Não foi possível consultar uma entrada",
                                  entry.path(), statusError);
 
-    if (fs::is_symlink(linkStatus)) {
+    if (ignorarLink) {
       Logger::log(Logger::Level::INFO,
-                  "Link simbólico ignorado durante o carregamento: " +
+                  "Link simbólico ou reparse point ignorado durante o "
+                  "carregamento: " +
                       caminhoCompleto);
       continue;
     }

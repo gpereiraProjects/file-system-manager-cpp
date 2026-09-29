@@ -209,9 +209,10 @@ The implementation maintains several operational invariants:
 - sizes and counts are recalculated after successful mutations;
 - paths use `std::filesystem`, and platform-specific console setup is isolated.
 
-The GitHub Actions workflow builds and tests both Debug and Release using MSVC
-on Windows, GCC on Linux, and Clang on macOS. It runs on pushes, pull requests,
-and manual dispatches with read-only repository permissions.
+The GitHub Actions workflow builds and tests both Debug and Release using
+MinGW-w64 GCC on Windows, GCC on Linux, and Apple Clang on macOS. It runs on
+pushes, pull requests, and manual dispatches with read-only repository
+permissions.
 
 ## Repository structure
 

@@ -70,7 +70,7 @@ that loading ignores symbolic links and cannot recurse through a cycle.
 The workflow in `.github/workflows/ci.yml` configures, builds, and tests both
 the Debug and Release presets on:
 
-- Windows with MSVC;
+- Windows with MinGW-w64 GCC;
 - Linux with GCC;
 - macOS with Clang.
 

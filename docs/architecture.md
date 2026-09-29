@@ -111,5 +111,7 @@ replace the active tree.
 
 Paths and physical operations use `std::filesystem`. Platform-dependent code
 is restricted to utility functions for UTF-8 console setup and thread-safe
-date conversion. CMake supplies the correct thread library and the CI matrix
-exercises MSVC, GCC, and Clang on their native operating systems.
+date conversion, plus native Windows reparse-point detection where the MinGW
+standard library cannot reliably distinguish directory aliases. CMake supplies
+the correct thread library and the CI matrix exercises MinGW-w64 GCC on
+Windows, GCC on Linux, and Apple Clang on macOS.

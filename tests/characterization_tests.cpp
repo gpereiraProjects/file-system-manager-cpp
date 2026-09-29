@@ -465,7 +465,11 @@ void testPathSearchSelectsExactItems() {
       fileSystem.Search("empty/small.txt", TipoItem::Ficheiro));
   expect(rootFile && documentsFile && emptyFile,
          "Relative paths should resolve every repeated filename exactly");
-  expect(fs::path(*rootFile).parent_path() == fixture.root,
+  std::error_code rootComparisonError;
+  const bool rootPathMatches =
+      fs::equivalent(fs::path(*rootFile).parent_path(), fixture.root,
+                     rootComparisonError);
+  expect(!rootComparisonError && rootPathMatches,
          "A leaf path should resolve only at the root level");
   expect(fs::path(*documentsFile).parent_path().filename() == "documents" &&
              fs::path(*emptyFile).parent_path().filename() == "empty",
