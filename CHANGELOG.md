@@ -29,6 +29,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Strict Clang warnings detected by the macOS continuous-integration build.
 - Windows reparse-point detection under MinGW, preventing directory-link
   cycles during traversal.
+- Absolute path resolution across equivalent canonical aliases on macOS.
 - Deprecated Node.js runtime warnings from the checkout workflow action.
 - Invalid menu input and end-of-file handling.
 - File and directory rename validation, collisions, and rollback.

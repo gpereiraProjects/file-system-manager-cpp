@@ -636,9 +636,16 @@ const Item *SistemaFicheiros::resolverCaminho(const string &caminho) const {
   fs::path pedido = fs::path(caminho).lexically_normal();
   fs::path relativo;
   if (pedido.is_absolute()) {
-    const fs::path caminhoRaiz =
-        fs::path(raiz->getCaminho()).lexically_normal();
-    relativo = pedido.lexically_relative(caminhoRaiz);
+    error_code pedidoError;
+    error_code raizError;
+    const fs::path pedidoCanonico =
+        fs::weakly_canonical(pedido, pedidoError);
+    const fs::path caminhoRaizCanonico = fs::weakly_canonical(
+        fs::path(raiz->getCaminho()), raizError);
+    if (pedidoError || raizError)
+      return nullptr;
+
+    relativo = pedidoCanonico.lexically_relative(caminhoRaizCanonico);
     if (relativo.empty())
       return nullptr;
   } else {
