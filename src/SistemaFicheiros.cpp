@@ -107,18 +107,17 @@ void SistemaFicheiros::carregarConteudo(
  * começar.
  *
  * Retorno:
- * - int: O número total de ficheiros encontrados na hierarquia. Retorna 0 se a
- * diretoria for nula.
+ * - size_t: O número total de ficheiros. Retorna 0 se a diretoria for nula.
  */
-int SistemaFicheiros::ContarFicheirosRec(Diretoria *dir) {
+size_t SistemaFicheiros::ContarFicheirosRec(const Diretoria *dir) const {
   if (dir == nullptr)
     return 0;
-  int total = 0;
+  size_t total = 0;
   for (const auto &item : dir->getConteudo()) {
     if (item->getIsFicheiro()) {
       total++;
     } else {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       if (subdir) {
         total += ContarFicheirosRec(subdir);
       }
@@ -138,16 +137,16 @@ int SistemaFicheiros::ContarFicheirosRec(Diretoria *dir) {
  * - dir (Diretoria*): Ponteiro para a diretoria raiz da contagem atual.
  *
  * Retorno:
- * - int: O número total de diretorias (incluindo a própria raiz).
+ * - size_t: O número total de diretorias (incluindo a própria raiz).
  * Retorna 0 se o ponteiro `dir` for nulo.
  */
-int SistemaFicheiros::ContarDirectoriasRec(Diretoria *dir) {
+size_t SistemaFicheiros::ContarDirectoriasRec(const Diretoria *dir) const {
   if (dir == nullptr)
     return 0;
-  int total = 1; // conta a diretoria atual
+  size_t total = 1; // conta a diretoria atual
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       if (subdir) {
         total += ContarDirectoriasRec(subdir);
       }
@@ -173,8 +172,9 @@ int SistemaFicheiros::ContarDirectoriasRec(Diretoria *dir) {
  * - string*: Ponteiro para a string 'strMax' contendo o caminho do maior
  * ficheiro. Retorna nullptr se a diretoria inicial for nula.
  */
-void SistemaFicheiros::ficheiroMaiorRec(Diretoria *dir, uintmax_t &tamMax,
-                                        string &strMax) {
+void SistemaFicheiros::ficheiroMaiorRec(const Diretoria *dir,
+                                        uintmax_t &tamMax,
+                                        string &strMax) const {
   if (!dir)
     return;
 
@@ -186,7 +186,7 @@ void SistemaFicheiros::ficheiroMaiorRec(Diretoria *dir, uintmax_t &tamMax,
       }
     } else {
       // é diretoria → recursão
-      Diretoria *diretoria = dynamic_cast<Diretoria *>(item.get());
+      const auto *diretoria = dynamic_cast<const Diretoria *>(item.get());
       if (diretoria) {
         ficheiroMaiorRec(diretoria, tamMax, strMax);
       }
@@ -205,10 +205,10 @@ void SistemaFicheiros::ficheiroMaiorRec(Diretoria *dir, uintmax_t &tamMax,
  * começar.
  *
  * Retorno:
- * - int: A quantidade total de memória ocupada pelos ficheiros.
+ * - uintmax_t: A quantidade total de bytes ocupada pelos ficheiros.
  * Retorna 0 se a diretoria for nula.
  */
-uintmax_t SistemaFicheiros::memoriaRec(Diretoria *dir) {
+uintmax_t SistemaFicheiros::memoriaRec(const Diretoria *dir) const {
   if (!dir)
     return 0;
 
@@ -218,7 +218,7 @@ uintmax_t SistemaFicheiros::memoriaRec(Diretoria *dir) {
     if (item->getIsFicheiro()) {
       total += item->getTamanho();
     } else {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       if (subdir) {
         total += memoriaRec(subdir);
       }
@@ -242,13 +242,14 @@ uintmax_t SistemaFicheiros::memoriaRec(Diretoria *dir) {
  * - string*: Ponteiro para uma string contendo o nome da diretoria com mais
  * itens.
  */
-string SistemaFicheiros::maiorDiretoriaRec(Diretoria *dir, size_t &maior) {
+string SistemaFicheiros::maiorDiretoriaRec(const Diretoria *dir,
+                                           size_t &maior) const {
   size_t localMax = dir->getNItens();
   string localName = dir->getNome();
 
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       size_t nItem = subdir->getNItens();
       if (nItem > localMax) {
         localMax = nItem;
@@ -284,13 +285,14 @@ string SistemaFicheiros::maiorDiretoriaRec(Diretoria *dir, size_t &maior) {
  * - string*: Ponteiro para uma string contendo o nome da diretoria com menos
  * itens.
  */
-string SistemaFicheiros::menorDiretoriaRec(Diretoria *dir, size_t &menor) {
+string SistemaFicheiros::menorDiretoriaRec(const Diretoria *dir,
+                                           size_t &menor) const {
   size_t localMin = dir->getNItens();
   string localName = dir->getNome();
 
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       size_t nItem = subdir->getNItens();
       if (nItem < localMin) {
         localMin = nItem;
@@ -329,15 +331,17 @@ string SistemaFicheiros::menorDiretoriaRec(Diretoria *dir, size_t &menor) {
  * - string*: Ponteiro para a variável 'strMax' (contendo o caminho da maior
  * diretoria encontrada).
  */
-void SistemaFicheiros::diretoriaMaisEspaco(Diretoria *dir, uintmax_t &tamMax,
-                                           string &strMax) {
+void SistemaFicheiros::diretoriaMaisEspaco(const Diretoria *dir,
+                                           uintmax_t &tamMax,
+                                           string &strMax) const {
   for (const auto &c : dir->getConteudo()) {
     if (!c->getIsFicheiro()) {
       if (c->getTamanho() > tamMax) {
         tamMax = c->getTamanho();
         strMax = c->getCaminho();
       }
-      if (auto *subdiretoria = dynamic_cast<Diretoria *>(c.get()))
+      if (const auto *subdiretoria =
+              dynamic_cast<const Diretoria *>(c.get()))
         diretoriaMaisEspaco(subdiretoria, tamMax, strMax);
     }
   }
@@ -358,17 +362,16 @@ void SistemaFicheiros::diretoriaMaisEspaco(Diretoria *dir, uintmax_t &tamMax,
  * Retorno:
  * - void (Não retorna valor, os resultados são armazenados em 'lres').
  */
-void SistemaFicheiros::pesquisarItensComNomeIgualRec(Diretoria *dir,
-                                                     list<string> &lres,
-                                                     const string &n,
-                                                     TipoItem tipo) {
+void SistemaFicheiros::pesquisarItensComNomeIgualRec(
+    const Diretoria *dir, list<string> &lres, const string &n,
+    TipoItem tipo) const {
   const bool procurarFicheiros = tipo == TipoItem::Ficheiro;
   if (dir->getNome() == n && !procurarFicheiros)
     lres.push_back(dir->getCaminho());
 
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       if (subdir)
         pesquisarItensComNomeIgualRec(subdir, lres, n, tipo);
     } else if (item->getNome() == n && procurarFicheiros) {
@@ -498,18 +501,18 @@ bool SistemaFicheiros::removerPorCaminho(Diretoria *dir,
  * Retorno:
  * - void (Não retorna valor).
  */
-void SistemaFicheiros::escreverXMLRec(Diretoria *dir, XML *XML) {
+void SistemaFicheiros::escreverXMLRec(const Diretoria *dir, XML *XML) const {
   XML->WriteStartDirectory(dir->getNome(), dir->getTamanho());
 
   for (const auto &item : dir->getConteudo()) {
     if (item->getIsFicheiro()) {
-      Ficheiro *fich = dynamic_cast<Ficheiro *>(item.get());
+      const auto *fich = dynamic_cast<const Ficheiro *>(item.get());
       if (fich) {
         XML->WriteFile(fich->getNome(), fich->getTamanho(), fich->getExtensao(),
                        fich->getDataModificacao());
       }
     } else {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       if (subdir) {
         escreverXMLRec(subdir, XML);
       }
@@ -598,6 +601,11 @@ bool SistemaFicheiros::contemDiretoria(Diretoria *origem,
  * rejeitados.
  */
 Item *SistemaFicheiros::resolverCaminho(const string &caminho) {
+  return const_cast<Item *>(
+      static_cast<const SistemaFicheiros *>(this)->resolverCaminho(caminho));
+}
+
+const Item *SistemaFicheiros::resolverCaminho(const string &caminho) const {
   if (!raiz || caminho.empty())
     return nullptr;
 
@@ -623,13 +631,13 @@ Item *SistemaFicheiros::resolverCaminho(const string &caminho) {
     componentes.push_back(valor);
   }
 
-  Item *atual = raiz.get();
+  const Item *atual = raiz.get();
   for (const string &componente : componentes) {
-    auto *diretoriaAtual = dynamic_cast<Diretoria *>(atual);
+    const auto *diretoriaAtual = dynamic_cast<const Diretoria *>(atual);
     if (!diretoriaAtual)
       return nullptr;
 
-    Item *seguinte = nullptr;
+    const Item *seguinte = nullptr;
     for (const auto &item : diretoriaAtual->getConteudo()) {
       if (item->getNome() == componente) {
         seguinte = item.get();
@@ -689,7 +697,8 @@ void SistemaFicheiros::setCaminhoRec(Diretoria *dir, string &caminhoDir) {
  * Retorno:
  * - void (Não retorna valor).
  */
-void SistemaFicheiros::ShowRec(Diretoria *dir, size_t &nTabs, ostream &out) {
+void SistemaFicheiros::ShowRec(const Diretoria *dir, size_t &nTabs,
+                               ostream &out) const {
   out << Utils::Tabulacao(nTabs) << "<D> " << dir->getNome() << " <"
       << dir->getTamanho() << " bytes>" << endl;
 
@@ -700,7 +709,7 @@ void SistemaFicheiros::ShowRec(Diretoria *dir, size_t &nTabs, ostream &out) {
       out << Utils::Tabulacao(nTabs) << "<F> " << item->getNome() << " <"
           << item->getTamanho() << " bytes>" << endl;
     else {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       if (subdir)
         ShowRec(subdir, nTabs, out);
     }
@@ -724,11 +733,11 @@ void SistemaFicheiros::ShowRec(Diretoria *dir, size_t &nTabs, ostream &out) {
  * - bool: Retorna 'true' se forem encontrados ficheiros com nomes duplicados,
  * ou 'false' caso contrário.
  */
-bool SistemaFicheiros::VerificarDuplicadosRec(Diretoria *dir,
-                                              unordered_set<string> &nomes) {
+bool SistemaFicheiros::VerificarDuplicadosRec(
+    const Diretoria *dir, unordered_set<string> &nomes) const {
   for (const auto &item : dir->getConteudo()) {
     if (!item->getIsFicheiro()) {
-      Diretoria *subdir = dynamic_cast<Diretoria *>(item.get());
+      const auto *subdir = dynamic_cast<const Diretoria *>(item.get());
       // Verifica recursivamente; se encontrar duplicado, retorna true
       if (VerificarDuplicadosRec(subdir, nomes)) {
         return true;
@@ -909,10 +918,10 @@ bool SistemaFicheiros::Load(const string &path) {
  * - Nenhum (utiliza o membro interno 'raiz').
  *
  * Retorno:
- * - int: O número total de ficheiros encontrados. Retorna 0 se o sistema
+ * - size_t: O número total de ficheiros encontrados. Retorna 0 se o sistema
  * não tiver sido carregado (raiz nula).
  */
-int SistemaFicheiros::ContarFicheiros() {
+size_t SistemaFicheiros::ContarFicheiros() const {
   if (raiz == nullptr)
     return 0;
   return ContarFicheirosRec(raiz.get());
@@ -928,10 +937,10 @@ int SistemaFicheiros::ContarFicheiros() {
  * - Nenhum (utiliza o membro interno 'raiz').
  *
  * Retorno:
- * - int: O número total de diretorias encontradas. Retorna 0 se o sistema
+ * - size_t: O número total de diretorias encontradas. Retorna 0 se o sistema
  * não tiver sido carregado (raiz nula).
  */
-int SistemaFicheiros::ContarDirectorias() {
+size_t SistemaFicheiros::ContarDirectorias() const {
   if (raiz == nullptr)
     return 0;
   return ContarDirectoriasRec(raiz.get());
@@ -946,14 +955,10 @@ int SistemaFicheiros::ContarDirectorias() {
  * - Nenhum (utiliza o membro interno 'raiz').
  *
  * Retorno:
- * - int: A quantidade total de memória em bytes. Retorna 0 se o sistema
+ * - uintmax_t: A quantidade total de bytes. Retorna 0 se o sistema
  * não tiver sido carregado (raiz nula).
  */
-int SistemaFicheiros::Memoria() {
-  const uintmax_t total = memoriaRec(raiz.get());
-  const auto limite = static_cast<uintmax_t>(numeric_limits<int>::max());
-  return static_cast<int>(min(total, limite));
-}
+uintmax_t SistemaFicheiros::Memoria() const { return memoriaRec(raiz.get()); }
 
 /**
  * Resumo:
@@ -967,7 +972,7 @@ int SistemaFicheiros::Memoria() {
  * Retorno:
  * - optional<string>: Nome da diretoria, ou vazio se não existir árvore.
  */
-optional<string> SistemaFicheiros::DirectoriaMaisElementos() {
+optional<string> SistemaFicheiros::DirectoriaMaisElementos() const {
   if (!raiz)
     return nullopt;
 
@@ -987,7 +992,7 @@ optional<string> SistemaFicheiros::DirectoriaMaisElementos() {
  * Retorno:
  * - optional<string>: Nome da diretoria, ou vazio se não existir árvore.
  */
-optional<string> SistemaFicheiros::DirectoriaMenosElementos() {
+optional<string> SistemaFicheiros::DirectoriaMenosElementos() const {
   if (!raiz)
     return nullopt;
 
@@ -1006,7 +1011,7 @@ optional<string> SistemaFicheiros::DirectoriaMenosElementos() {
  * Retorno:
  * - optional<string>: Caminho do ficheiro, ou vazio se não existir ficheiro.
  */
-optional<string> SistemaFicheiros::FicheiroMaior() {
+optional<string> SistemaFicheiros::FicheiroMaior() const {
   if (raiz == nullptr)
     return nullopt;
 
@@ -1030,7 +1035,7 @@ optional<string> SistemaFicheiros::FicheiroMaior() {
  * Retorno:
  * - optional<string>: Caminho da diretoria, ou vazio se não houver resultado.
  */
-optional<string> SistemaFicheiros::DirectoriaMaisEspaco() {
+optional<string> SistemaFicheiros::DirectoriaMaisEspaco() const {
   if (raiz == nullptr)
     return nullopt;
 
@@ -1055,11 +1060,12 @@ optional<string> SistemaFicheiros::DirectoriaMaisEspaco() {
  * Retorno:
  * - optional<string>: Caminho do item, ou vazio se não for encontrado.
  */
-optional<string> SistemaFicheiros::Search(const string &s, TipoItem tipo) {
+optional<string> SistemaFicheiros::Search(const string &s,
+                                          TipoItem tipo) const {
   if (!raiz)
     return nullopt;
 
-  Item *item = resolverCaminho(s);
+  const Item *item = resolverCaminho(s);
   if (!item)
     return nullopt;
   const bool tipoCorreto = tipo == TipoItem::Ficheiro
@@ -1109,7 +1115,7 @@ bool SistemaFicheiros::RemoverAll(const string &s, TipoItem tipo) {
  * - bool: Verdadeiro quando o documento completo é publicado com sucesso.
  * Em caso de falha, preserva o ficheiro anterior sempre que este exista.
  */
-bool SistemaFicheiros::Escrever_XML(const string &s) {
+bool SistemaFicheiros::Escrever_XML(const string &s) const {
   if (!raiz) {
     Logger::log(Logger::Level::ERROR_,
                 "Não é possível exportar um sistema não carregado.");
@@ -1410,11 +1416,12 @@ bool SistemaFicheiros::MoverDirectoria(const string &DirOld,
  * Retorno:
  * - optional<string>: Data do ficheiro, ou vazio se não for encontrado.
  */
-optional<string> SistemaFicheiros::DataFicheiro(const string &ficheiro) {
+optional<string> SistemaFicheiros::DataFicheiro(const string &ficheiro) const {
   if (!raiz)
     return nullopt;
 
-  auto *item = dynamic_cast<Ficheiro *>(resolverCaminho(ficheiro));
+  const auto *item =
+      dynamic_cast<const Ficheiro *>(resolverCaminho(ficheiro));
   if (!item)
     return nullopt;
   return item->getDataModificacao();
@@ -1434,7 +1441,7 @@ optional<string> SistemaFicheiros::DataFicheiro(const string &ficheiro) {
  * Retorno:
  * - void (Não retorna valor).
  */
-void SistemaFicheiros::Tree(const string &ficheiro) {
+void SistemaFicheiros::Tree(const string &ficheiro) const {
   if (!raiz)
     return;
 
@@ -1467,7 +1474,8 @@ void SistemaFicheiros::Tree(const string &ficheiro) {
  * Retorno:
  * - list<string>: Caminhos de todas as diretorias encontradas.
  */
-list<string> SistemaFicheiros::PesquisarAllDirectorias(const string &dir) {
+list<string>
+SistemaFicheiros::PesquisarAllDirectorias(const string &dir) const {
   list<string> resultados;
   if (!raiz)
     return resultados;
@@ -1493,7 +1501,7 @@ list<string> SistemaFicheiros::PesquisarAllDirectorias(const string &dir) {
  * Retorno:
  * - list<string>: Caminhos de todos os ficheiros encontrados.
  */
-list<string> SistemaFicheiros::PesquisarAllFicheiros(const string &file) {
+list<string> SistemaFicheiros::PesquisarAllFicheiros(const string &file) const {
   list<string> resultados;
   if (!raiz)
     return resultados;
@@ -1663,7 +1671,7 @@ void SistemaFicheiros::RenomearFicheiros(const string &fich_old,
  * - bool: Retorna 'true' se forem encontrados ficheiros duplicados,
  * ou 'false' se todos os nomes forem únicos.
  */
-bool SistemaFicheiros::FicheiroDuplicados() {
+bool SistemaFicheiros::FicheiroDuplicados() const {
   if (!raiz)
     return false;
   unordered_set<string> nomes; // guarda nomes únicos~

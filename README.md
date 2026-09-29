@@ -99,6 +99,8 @@ The domain model is intentionally separated from the console interface:
   controlled methods perform additions and ownership transfers;
 - public headers use qualified standard-library names and do not leak namespace
   directives into consumers;
+- count queries use `std::size_t`, byte totals use `std::uintmax_t`, and
+  read-only operations are callable through `const SistemaFicheiros&`;
 - the reusable core library contains the domain and persistence code, while
   `Menu.cpp` is compiled only into the console executable.
 

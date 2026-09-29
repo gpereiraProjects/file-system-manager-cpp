@@ -34,16 +34,26 @@ static_assert(std::has_virtual_destructor_v<Item>,
 static_assert(std::is_base_of_v<Item, Ficheiro>);
 static_assert(std::is_base_of_v<Item, Diretoria>);
 static_assert(std::is_same_v<
-              decltype(std::declval<SistemaFicheiros>().Search(
+              decltype(std::declval<const SistemaFicheiros &>().Search(
                   std::declval<const std::string &>(),
                   SistemaFicheiros::TipoItem::Ficheiro)),
               std::optional<std::string>>,
               "Search results must use value semantics");
 static_assert(std::is_same_v<
-              decltype(std::declval<SistemaFicheiros>().PesquisarAllFicheiros(
-                  std::declval<const std::string &>())),
+              decltype(std::declval<const SistemaFicheiros &>()
+                           .PesquisarAllFicheiros(
+                               std::declval<const std::string &>())),
               std::list<std::string>>,
               "Collection queries must return owned values");
+static_assert(std::is_same_v<
+              decltype(std::declval<const SistemaFicheiros &>()
+                           .ContarFicheiros()),
+              std::size_t>,
+              "File counts must use std::size_t");
+static_assert(std::is_same_v<
+              decltype(std::declval<const SistemaFicheiros &>().Memoria()),
+              std::uintmax_t>,
+              "Byte totals must use std::uintmax_t");
 
 namespace {
 
@@ -179,6 +189,39 @@ void testLoadAndStatistics() {
   std::optional<std::string> mostSpace(fileSystem.DirectoriaMaisEspaco());
   expect(mostSpace && fs::path(*mostSpace).filename() == "documents",
          "The documents directory should occupy the most space");
+}
+
+void testConstQueriesPreserveWideSizes() {
+  TemporaryFixture fixture;
+  const fs::path xmlPath = fixture.root / "wide-size.xml";
+  constexpr std::uintmax_t expectedSize = UINTMAX_C(5000000000);
+  {
+    std::ofstream output(xmlPath, std::ios::binary);
+    output << "<diretoria nome=\"root\" tamanho=\"" << expectedSize
+           << "\"><ficheiro nome=\"large.bin\" tamanho=\"" << expectedSize
+           << "\" extensao=\"bin\" dataModificacao=\"2026|09|29\"/>"
+              "</diretoria>";
+  }
+
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Ler_XML(xmlPath.string()),
+         "The wide-size XML fixture should load");
+  const SistemaFicheiros &view = fileSystem;
+
+  expect(view.ContarFicheiros() == std::size_t{1},
+         "Const queries should expose the exact file count");
+  expect(view.ContarDirectorias() == std::size_t{1},
+         "Const queries should expose the exact directory count");
+  expect(view.Memoria() == expectedSize,
+         "Byte totals must not be truncated to a 32-bit int");
+  expect(view.Search("large.bin", TipoItem::Ficheiro),
+         "Search should be callable through a const reference");
+  expect(view.DataFicheiro("large.bin"),
+         "Metadata lookup should be callable through a const reference");
+  expect(view.PesquisarAllFicheiros("large.bin").size() == std::size_t{1},
+         "Collection queries should be callable through a const reference");
+  expect(!view.FicheiroDuplicados(),
+         "Duplicate detection should be callable through a const reference");
 }
 
 void testPortablePathNormalization() {
@@ -864,6 +907,7 @@ int main() {
 
   const std::vector<std::pair<std::string, std::function<void()>>> tests = {
       {"load and statistics", testLoadAndStatistics},
+      {"const queries and wide sizes", testConstQueriesPreserveWideSizes},
       {"portable path normalization", testPortablePathNormalization},
       {"menu input and EOF", testMenuInputAndEndOfFileHandling},
       {"invalid directory", testInvalidDirectoryIsRejected},
