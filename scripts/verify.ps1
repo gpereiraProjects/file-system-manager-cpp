@@ -21,12 +21,31 @@ function Invoke-NativeCommand {
     }
 }
 
-if ($null -eq (Get-Command cmake -ErrorAction SilentlyContinue)) {
-    throw "CMake was not found in PATH. Install CMake 3.22 or newer."
+$CMakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
+$CTestCommand = Get-Command ctest -ErrorAction SilentlyContinue
+
+if ($null -eq $CMakeCommand -or $null -eq $CTestCommand) {
+    $CandidateDirectories = @(
+        "C:\msys64\ucrt64\bin",
+        "C:\msys64\mingw64\bin",
+        (Join-Path $env:ProgramFiles "CMake\bin")
+    )
+
+    foreach ($CandidateDirectory in $CandidateDirectories) {
+        $CMakeCandidate = Join-Path $CandidateDirectory "cmake.exe"
+        $CTestCandidate = Join-Path $CandidateDirectory "ctest.exe"
+
+        if ((Test-Path $CMakeCandidate) -and (Test-Path $CTestCandidate)) {
+            $env:Path = "$CandidateDirectory;$env:Path"
+            $CMakeCommand = Get-Command $CMakeCandidate
+            $CTestCommand = Get-Command $CTestCandidate
+            break
+        }
+    }
 }
 
-if ($null -eq (Get-Command ctest -ErrorAction SilentlyContinue)) {
-    throw "CTest was not found in PATH. Install the CMake test tools."
+if ($null -eq $CMakeCommand -or $null -eq $CTestCommand) {
+    throw "CMake and CTest were not found. Install CMake 3.22 or newer."
 }
 
 $SelectedPresets = if ($Preset -eq "all") {
@@ -37,13 +56,13 @@ $SelectedPresets = if ($Preset -eq "all") {
 
 foreach ($SelectedPreset in $SelectedPresets) {
     Write-Host "Configuring the $SelectedPreset preset..."
-    Invoke-NativeCommand -Executable "cmake" -CommandArguments @("--preset", $SelectedPreset)
+    Invoke-NativeCommand -Executable $CMakeCommand.Source -CommandArguments @("--preset", $SelectedPreset)
 
     Write-Host "Building the $SelectedPreset preset..."
-    Invoke-NativeCommand -Executable "cmake" -CommandArguments @("--build", "--preset", $SelectedPreset)
+    Invoke-NativeCommand -Executable $CMakeCommand.Source -CommandArguments @("--build", "--preset", $SelectedPreset)
 
     Write-Host "Testing the $SelectedPreset preset..."
-    Invoke-NativeCommand -Executable "ctest" -CommandArguments @("--preset", $SelectedPreset)
+    Invoke-NativeCommand -Executable $CTestCommand.Source -CommandArguments @("--preset", $SelectedPreset)
 }
 
 Write-Host "Verification completed successfully."
