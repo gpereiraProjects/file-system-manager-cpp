@@ -68,10 +68,11 @@ cmake --build --preset debug
 ctest --test-dir build/debug --output-on-failure
 ```
 
-The current characterization suite protects directory loading, statistics,
-search, largest-file selection, tree output, invalid-path handling, and XML
-export/import behavior while the implementation is refactored. It also covers
-file and directory ownership transfers after move operations.
+The characterization suite protects directory loading, statistics, exact-path
+queries and moves, wide byte totals, tree rendering and persistence, invalid
+paths, XML transactions, rename result states, symbolic-link handling and
+ownership transfers. It also verifies the unloaded API contract and confirms
+that domain operations stay silent while the menu presents their results.
 
 ## Memory ownership
 

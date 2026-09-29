@@ -240,6 +240,36 @@ void testConstQueriesPreserveWideSizes() {
          "Duplicate detection should be callable through a const reference");
 }
 
+void testUnloadedPublicApiContract() {
+  SistemaFicheiros fileSystem;
+  const SistemaFicheiros &view = fileSystem;
+
+  expect(view.ContarFicheiros() == std::size_t{0} &&
+             view.ContarDirectorias() == std::size_t{0} &&
+             view.Memoria() == std::uintmax_t{0},
+         "Unloaded counters should return zero");
+  expect(!view.DirectoriaMaisElementos() &&
+             !view.DirectoriaMenosElementos() && !view.FicheiroMaior() &&
+             !view.DirectoriaMaisEspaco(),
+         "Unloaded statistics should return empty optionals");
+  expect(!view.Search("anything", TipoItem::Ficheiro) &&
+             !view.DataFicheiro("anything"),
+         "Unloaded direct queries should return empty optionals");
+  expect(view.PesquisarAllDirectorias("anything").empty() &&
+             view.PesquisarAllFicheiros("anything").empty() &&
+             view.Tree().empty(),
+         "Unloaded collection and tree queries should return empty values");
+
+  const auto rename = fileSystem.RenomearFicheiros("old.txt", "new.txt");
+  expect(rename.estado == EstadoRenomeacao::SistemaNaoCarregado &&
+             rename.quantidade == std::size_t{0},
+         "Unloaded rename should return its typed failure state");
+  expect(!fileSystem.MoveFicheiro("old.txt", ".") &&
+             !fileSystem.MoverDirectoria("old", ".") &&
+             !fileSystem.RemoverAll("old.txt", TipoItem::Ficheiro),
+         "Unloaded mutations should fail without side effects");
+}
+
 void testPortablePathNormalization() {
   const fs::path unnormalized =
       fs::path("parent") / "." / "child" / ".." / "file.txt";
@@ -299,6 +329,22 @@ void testMenuInputAndEndOfFileHandling() {
     expect(!Menu::ExecutarOpcao(fileSystem),
            "Every submenu should propagate end of input");
   }
+}
+
+void testMenuPresentsDomainRenameResult() {
+  TemporaryFixture fixture;
+  SistemaFicheiros fileSystem;
+  expect(fileSystem.Load(fixture.root.string()), "Fixture load failed");
+
+  ScopedConsoleInput console("3\nsmall.txt\nrenamed.txt\n\n7\n");
+  expect(!Menu::ExecutarOpcao(fileSystem),
+         "The menu should eventually process the explicit exit option");
+  expect(console.capturedOutput().find(
+             "Operação concluída. Ficheiros renomeados: 1") !=
+             std::string::npos,
+         "The presentation layer should translate a successful domain result");
+  expect(fs::exists(fixture.root / "renamed.txt"),
+         "The menu-driven rename should still update the domain and disk");
 }
 
 void testDomainOperationsDoNotWriteToConsole() {
@@ -498,6 +544,10 @@ void testTreeOutput() {
          "Tree output should contain directory markers");
   expect(tree.find("<F> largest.bin") != std::string::npos,
          "Tree output should contain nested files");
+  expect(tree == renderedTree,
+         "Persisted and returned tree representations should match exactly");
+  expect(!fileSystem.EscreverArvore(fixture.root.string()),
+         "Tree export should reject a directory destination");
 }
 
 void testXmlRoundTrip() {
@@ -975,8 +1025,10 @@ int main() {
   const std::vector<std::pair<std::string, std::function<void()>>> tests = {
       {"load and statistics", testLoadAndStatistics},
       {"const queries and wide sizes", testConstQueriesPreserveWideSizes},
+      {"unloaded public API", testUnloadedPublicApiContract},
       {"portable path normalization", testPortablePathNormalization},
       {"menu input and EOF", testMenuInputAndEndOfFileHandling},
+      {"menu rename presentation", testMenuPresentsDomainRenameResult},
       {"silent domain operations", testDomainOperationsDoNotWriteToConsole},
       {"invalid directory", testInvalidDirectoryIsRejected},
       {"symbolic-link cycle", testSymbolicLinkCyclesAreIgnored},
