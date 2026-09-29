@@ -1,66 +1,171 @@
 # File System Manager
 
-An object-oriented C++17 console application that loads a directory tree into
-memory and provides operations for inspecting, searching, moving, copying,
-renaming, exporting, and importing file-system data.
+A cross-platform C++17 console application that models a directory tree in
+memory and safely coordinates queries, mutations, and XML persistence with the
+physical file system.
 
-This repository is being prepared as a portfolio version of an academic
-Object-Oriented Programming project. The implementation supports Windows,
-Linux, and macOS through the C++17 standard library and a small isolated
-Windows console adaptation.
+This project began as an Object-Oriented Programming assignment and was later
+reworked as a portfolio project. The current version focuses on explicit
+ownership, clear domain boundaries, transactional operations, portable paths,
+and automated characterization tests.
 
-## Requirements
+## Highlights
 
-- CMake 3.22 or newer
-- A C++17 compiler, such as MSVC, GCC, or Clang
-- Ninja when using the included CMake presets
+- Object-oriented domain model built around an abstract `Item` base class.
+- Exclusive tree ownership expressed with `std::unique_ptr`.
+- Value-based public API using `std::optional` and strongly typed enums.
+- Exact path resolution for unambiguous searches and moves.
+- Transactional batch renaming and defensive file-system operations.
+- Robust XML import and export with validation and rollback behavior.
+- Domain logic separated from the interactive console presentation.
+- CMake presets and strict compiler warnings for reproducible builds.
+- Automated tests and CI on Windows, Linux, and macOS.
 
-The project is currently developed with the MSYS2 UCRT64 toolchain on Windows,
-but the build does not depend on MSYS2 or Windows-specific project files.
+## What the application can do
 
-## Build
+After loading a directory or a previously exported XML snapshot, the
+application can:
 
-From a terminal opened in the repository root:
+- count files and directories and calculate the total byte size;
+- identify the largest file and directories with notable statistics;
+- search by exact relative or absolute path;
+- list every file or directory with a given name;
+- move files and directories while rejecting collisions and cycles;
+- rename matching files as an all-or-nothing operation;
+- copy batches of files and resolve destination-name collisions;
+- remove matching items from the model and the physical file system;
+- detect duplicate file names;
+- render and save the directory tree;
+- export the model to XML and restore it after full validation.
 
-```console
-cmake -S . -B build
-cmake --build build --config Release
+Example tree output:
+
+```text
+workspace
+|-- documents
+|   |-- report.pdf
+|   `-- notes.txt
+`-- images
+    `-- diagram.png
 ```
 
-The executable is generated under `build/bin`.
+> Some commands modify the physical file system. Use a disposable directory
+> when exploring move, rename, copy, and remove operations.
 
-Alternatively, use one of the included presets:
+## Architecture
+
+```mermaid
+classDiagram
+    class Item {
+        <<abstract>>
+        -string nome
+        -string caminho
+        -uintmax_t tamanho
+        +getIsFicheiro()* bool
+    }
+
+    class Ficheiro {
+        -string extensao
+        -string dataModificacao
+    }
+
+    class Diretoria {
+        -ItemCollection conteudo
+        +adicionar(owned Item)
+        +extrair(Item) owned Item
+        +recalcularTamanho() uintmax_t
+    }
+
+    class SistemaFicheiros {
+        -owned Diretoria raiz
+        +Load(path) bool
+        +Search(path, tipo) OptionalString
+        +Tree() string
+        +Escrever_XML(path) bool
+        +Ler_XML(path) bool
+    }
+
+    class XML {
+        +ReadDocument(stream) owned Diretoria
+        +WriteFile(...)
+        +WriteStartDirectory(...)
+    }
+
+    class Menu
+
+    Item <|-- Ficheiro
+    Item <|-- Diretoria
+    Diretoria *-- Item : owns children
+    SistemaFicheiros *-- Diretoria : owns root
+    SistemaFicheiros ..> XML : persists through
+    Menu ..> SistemaFicheiros : presents results from
+```
+
+`SistemaFicheiros` is the application-facing domain service. It owns the root
+directory and protects tree invariants. `Diretoria` owns its children, while
+`Ficheiro` stores file-specific metadata. `XML` handles persistence, and
+`Menu` is responsible only for input and user-facing output.
+
+See [Architecture](docs/architecture.md) for the ownership model, component
+boundaries, and the main reliability decisions.
+
+## Object-oriented design
+
+- **Abstraction and polymorphism:** `Item` defines the common contract used by
+  `Ficheiro` and `Diretoria`.
+- **Encapsulation:** tree contents are exposed as a read-only view and changed
+  through controlled ownership-transfer operations.
+- **Composition:** a directory is composed of exclusively owned child items;
+  the file-system model owns exactly one root.
+- **Separation of concerns:** domain, console presentation, logging, utilities,
+  and XML persistence have distinct responsibilities.
+- **RAII:** memory, streams, temporary trees, and ownership transfers are tied
+  to object lifetimes rather than manual cleanup.
+
+The public API never returns owning raw pointers. Optional query results use
+`std::optional`, item categories use `enum class`, collections are returned by
+value, and read-only queries are `const`.
+
+## Build and run
+
+### Requirements
+
+- CMake 3.22 or newer;
+- a C++17 compiler: MSVC, GCC, or Clang;
+- Ninja when using the included presets.
+
+Configure and build a debug version:
 
 ```console
 cmake --preset debug
 cmake --build --preset debug
 ```
 
-Replace `debug` with `release` for an optimized build. Preset
-executables are generated under `build/<preset>/bin`. Both presets treat
-compiler warnings as errors so regressions are detected during development.
-
-To enable warnings as errors:
+Run it on Windows:
 
 ```console
-cmake -S . -B build -DFILE_SYSTEM_MANAGER_WARNINGS_AS_ERRORS=ON
-cmake --build build --config Release
+.\build\debug\bin\file_system_manager.exe
 ```
 
-## Project structure
+Run it on Linux or macOS:
 
-```text
-.
-|-- include/     Public class declarations
-|-- src/         Class implementations
-|-- tests/       Automated characterization tests
-|-- main.cpp     Application entry point
-`-- CMakeLists.txt
+```console
+./build/debug/bin/file_system_manager
+```
+
+For an optimized build, replace `debug` with `release`. Both presets enable a
+strict warning set and treat compiler warnings as errors.
+
+If Ninja is unavailable, use a generator-independent build:
+
+```console
+cmake -S . -B build
+cmake --build build --config Release
 ```
 
 ## Tests
 
-Build the selected preset and run its test suite with CTest:
+Build the debug preset and run the test suite through CTest:
 
 ```console
 cmake --preset debug
@@ -68,90 +173,71 @@ cmake --build --preset debug
 ctest --test-dir build/debug --output-on-failure
 ```
 
-The characterization suite protects directory loading, statistics, exact-path
-queries and moves, wide byte totals, tree rendering and persistence, invalid
-paths, XML transactions, rename result states, symbolic-link handling and
-ownership transfers. It also verifies the unloaded API contract and confirms
-that domain operations stay silent while the menu presents their results.
+The suite currently contains 30 characterization scenarios. It covers the
+public API, statistics, wide byte sizes, exact paths, EOF handling, separation
+of presentation and domain logic, symbolic-link cycles, ownership transfers,
+physical mutations, and valid and invalid XML transactions.
 
-## Memory ownership
+See [Testing strategy](docs/testing.md) for the full test map and platform
+notes.
 
-The in-memory tree uses `std::unique_ptr` to express exclusive ownership:
+## Reliability and portability
 
-- `SistemaFicheiros` owns the root directory;
-- each `Diretoria` owns its files and child directories;
-- move operations transfer ownership instead of copying or reusing owning raw
-  pointers;
-- XML streams and temporary trees rely on automatic lifetime management.
+The implementation maintains several operational invariants:
 
-The public API returns values and `std::optional` results, so callers never
-receive owning raw pointers or need to call `delete`. Item categories use the
-strong `SistemaFicheiros::TipoItem` enumeration instead of numeric or textual
-sentinels, and collection queries return their results by value.
+- a failed load or XML import preserves the current in-memory tree;
+- directory loading ignores symbolic links and tracks canonical identities;
+- moves reject duplicate destinations and cyclic directory relationships;
+- batch renaming validates every destination before committing any change;
+- failed multi-step disk operations attempt to roll back completed steps;
+- XML is first written to a temporary file and imported into a temporary tree;
+- sizes and counts are recalculated after successful mutations;
+- paths use `std::filesystem`, and platform-specific console setup is isolated.
 
-## Object-oriented design
+The GitHub Actions workflow builds and tests the same source using MSVC on
+Windows, GCC on Linux, and Clang on macOS.
 
-The domain model is intentionally separated from the console interface:
+## Repository structure
 
-- `Item` is an abstract base class with a virtual destructor and a polymorphic
-  file-type query;
-- `Ficheiro` and `Diretoria` provide the concrete file and directory behavior;
-- a directory exposes its owned collection as a read-only view, while
-  controlled methods perform additions and ownership transfers;
-- public headers use qualified standard-library names and do not leak namespace
-  directives into consumers;
-- count queries use `std::size_t`, byte totals use `std::uintmax_t`, and
-  read-only operations are callable through `const SistemaFicheiros&`;
-- domain operations never write to the console: tree rendering returns text,
-  renaming returns a typed result, and the menu translates results into
-  user-facing messages;
-- the reusable core library contains the domain and persistence code, while
-  `Menu.cpp` is compiled only into the console executable.
+```text
+.
+|-- .github/workflows/   Cross-platform continuous integration
+|-- docs/                Architecture and testing documentation
+|-- include/             Public class declarations
+|-- src/                 Domain, persistence, console, and utility code
+|-- tests/               Automated characterization suite
+|-- CMakeLists.txt       Build targets and compiler policy
+|-- CMakePresets.json    Debug and release presets
+`-- main.cpp             Application entry point
+```
 
-## Operational safety
+The reusable `file_system_manager_core` library contains the domain and
+persistence code. The interactive menu is linked only into the executable and
+the presentation-oriented tests.
 
-Operations that affect the physical file system are exercised only inside
-temporary test fixtures. The implementation maintains these invariants:
+## Project background
 
-- failed directory loads and XML imports preserve the previously loaded tree;
-- directory loading ignores symbolic links and records canonical directory
-  identities, preventing cycles and repeated traversal through aliases;
-- direct searches, metadata queries and move operations resolve absolute paths
-  or paths relative to the loaded root, so repeated names cannot select an
-  arbitrary item; `.` identifies the root directory;
-- file and directory moves reject duplicates and cyclic directory moves;
-- failed physical moves attempt to roll back before returning an error;
-- removals update the disk before committing the in-memory change;
-- batch copies add an in-memory item only after its physical copy succeeds;
-- batch renames validate portable leaf names and every destination before any
-  change, then roll back completed disk renames if a later one fails;
-- renaming a file also keeps its extension metadata synchronized;
-- directory sizes and total file bytes are recalculated after mutations.
+The first version was created for an academic Object-Oriented Programming
+project. The portfolio version preserves the original problem domain while
+substantially revising memory ownership, error handling, public interfaces,
+file-system safety, XML validation, portability, build automation, and tests.
 
-## XML persistence
+The original assignment document is intentionally not included. Requirements
+are described here in original wording so the repository remains focused on
+the implementation and respects the source material.
 
-XML snapshots are written to a temporary file and only replace the destination
-after the complete document has been flushed successfully. If replacement
-fails, the previous snapshot is restored whenever one existed.
+## Possible next steps
 
-The XML reader builds a temporary tree and commits it only after validating the
-entire document. It supports escaped and numeric character references, flexible
-attribute order and self-closing file elements. It rejects malformed nesting,
-unknown or duplicate attributes, invalid and overflowing sizes, inconsistent
-directory totals, duplicate child names, multiple roots, unknown entities and
-non-portable names, including reserved Windows device names and names that
-could escape their parent path. Child-name collisions are checked without
-ASCII case sensitivity so a snapshot remains portable across supported
-platforms. Unsupported XML constructs are rejected rather than interpreted.
+- split large domain operations into smaller services;
+- add a non-interactive command-line interface;
+- introduce structured error types for every mutating operation;
+- benchmark very large directory trees;
+- generate API reference documentation from public headers.
 
-## Portability
+## Author
 
-Platform-independent paths are composed and normalized with
-`std::filesystem`. Console clearing uses ANSI terminal sequences, while the
-Windows-only UTF-8 and virtual-terminal setup is isolated inside `Utils.cpp`.
-Date conversion selects the thread-safe API provided by each operating system,
-and CMake links the platform's standard thread implementation through
-`Threads::Threads`.
+Developed by Guilherme Pereira.
 
-The continuous-integration workflow builds and tests the same source with
-MSVC on Windows, GCC on Linux, and Clang on macOS.
+## License
+
+This project is available under the [MIT License](LICENSE).
