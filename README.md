@@ -173,6 +173,21 @@ cmake --build --preset debug
 ctest --test-dir build/debug --output-on-failure
 ```
 
+For the complete local verification sequence, use the platform script:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+```console
+./scripts/verify.sh
+```
+
+With no argument, each script verifies both Debug and Release: it configures
+the project, builds every target with warnings treated as errors, and runs the
+matching CTest presets. Pass `debug` or `release` to check only one
+configuration during development.
+
 The suite currently contains 30 characterization scenarios. It covers the
 public API, statistics, wide byte sizes, exact paths, EOF handling, separation
 of presentation and domain logic, symbolic-link cycles, ownership transfers,
@@ -194,8 +209,9 @@ The implementation maintains several operational invariants:
 - sizes and counts are recalculated after successful mutations;
 - paths use `std::filesystem`, and platform-specific console setup is isolated.
 
-The GitHub Actions workflow builds and tests the same source using MSVC on
-Windows, GCC on Linux, and Clang on macOS.
+The GitHub Actions workflow builds and tests both Debug and Release using MSVC
+on Windows, GCC on Linux, and Clang on macOS. It runs on pushes, pull requests,
+and manual dispatches with read-only repository permissions.
 
 ## Repository structure
 
@@ -204,6 +220,7 @@ Windows, GCC on Linux, and Clang on macOS.
 |-- .github/workflows/   Cross-platform continuous integration
 |-- docs/                Architecture and testing documentation
 |-- include/             Public class declarations
+|-- scripts/             Local pre-publication verification
 |-- src/                 Domain, persistence, console, and utility code
 |-- tests/               Automated characterization suite
 |-- CMakeLists.txt       Build targets and compiler policy

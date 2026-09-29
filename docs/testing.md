@@ -36,6 +36,19 @@ ctest --test-dir build/debug --output-on-failure
 The presets treat compiler warnings as errors. A successful local run therefore
 checks both the tests and the configured compiler warning policy.
 
+The same sequence is available through the local verification scripts:
+
+```powershell
+.\scripts\verify.ps1
+```
+
+```console
+./scripts/verify.sh
+```
+
+With no argument, the scripts validate Debug followed by Release. Pass one of
+those preset names to run only that configuration.
+
 ## Isolation
 
 Each file-system scenario creates a unique fixture under the operating
@@ -54,12 +67,13 @@ that loading ignores symbolic links and cannot recurse through a cycle.
 
 ## Continuous integration
 
-The workflow in `.github/workflows/ci.yml` configures, builds, and runs the
-same debug preset on:
+The workflow in `.github/workflows/ci.yml` configures, builds, and tests both
+the Debug and Release presets on:
 
 - Windows with MSVC;
 - Linux with GCC;
 - macOS with Clang.
 
 This matrix detects compiler assumptions, path-handling differences, and
-platform-specific regressions before changes are accepted.
+platform-specific regressions before changes are accepted. The workflow can
+also be started manually from GitHub and uses read-only repository permissions.
