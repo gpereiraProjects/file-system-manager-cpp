@@ -15,6 +15,7 @@ out/
 # Code::Blocks and editor-specific files
 *.depend
 *.layout
+*.cbp
 *.cbp.bak
 *.user
 .vscode/

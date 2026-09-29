@@ -223,6 +223,7 @@ and manual dispatches with read-only repository permissions.
 |-- scripts/             Local pre-publication verification
 |-- src/                 Domain, persistence, console, and utility code
 |-- tests/               Automated characterization suite
+|-- CHANGELOG.md         First public release notes
 |-- CMakeLists.txt       Build targets and compiler policy
 |-- CMakePresets.json    Debug and release presets
 `-- main.cpp             Application entry point
